@@ -1,3 +1,6 @@
+# import function name 
+from Helpers import StartJio, StoreMode, AddOrder, ViewOrder, RemoveOrder, CloseJio
+
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 
 def main():
@@ -6,10 +9,10 @@ def main():
     dp = updater.dispatcher
     dp.add_handler(CommandHandler(“StartJio”, StartJio)
 	dp.add_handler(CommandHandler(“Store”, StoreMode)
-	dp.add_handler(CommandHandler(“AddOrder”, OrderingStage.AddOrder)
-    dp.add_handler(CommandHandler(“ViewOrder”, OrderingStage.ViewOrder)
-    dp.add_handler(CommandHandler(“RemoveOrder”, OrderingStage.RemoveOrder)
-    dp.add_handler(CommandHandler(“CloseJio”, OrderingStage.CloseJio)
+	dp.add_handler(CommandHandler(“AddOrder”, AddOrder)
+    dp.add_handler(CommandHandler(“ViewOrder”, ViewOrder)
+    dp.add_handler(CommandHandler(“RemoveOrder”, RemoveOrder)
+    dp.add_handler(CommandHandler(“CloseJio”, CloseJio)
     # dp.add_handler(CommandHandler(“Help”, help)
 
     # start checking for updates
