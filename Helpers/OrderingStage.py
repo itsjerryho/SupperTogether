@@ -1,1 +1,86 @@
-ECHO is on.
+from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, InlineQuery
+
+class order:
+    def __init__(self, user, restuarant=None, address = None, phone = None):
+        self.user = user
+        self.restuarant = restuarant
+        self.address = address
+        self.phone = phone
+        self.food = {}
+
+    def addOrder(self, name, item):
+        #check if name exists
+        if name in self.food:
+            temp = self.food[name]
+            #check if item exists
+            if item in temp:
+                temp[item] = temp[item] + 1
+            else:
+                temp[item] = 1
+        else:
+            self.food[name] = {name:1}
+    
+    
+    def viewOrder(self):
+        output = ""
+        for item in self.food :
+            temp = self.food[item]
+            for name in temp :
+                output = output + name + " " + item + " x" + temp[name] + "\n"
+        return output
+
+
+    def deleteOrder(self, update, context):
+        #step 1: List items chosen
+        list_of_items = self.food[update.effective_user]
+        
+        #step 2: choose from menu
+        if list_of_items is None:
+            context.bot.sendMessage(chat_id = update.effective_user.id, text = "You have not ordered anything yet")
+        else:
+            reply_markup = self.InlineKeyboard(list_of_items)
+            context.bot.sendMessage(chat_id  = update.effect_user.id, text = "Select which item to delete", reply_markup = reply_markup)
+        
+        #step 3: delete item
+            deleteHelper_handler = CallbackQueryHandler(lambda update, context: deleteHelper(self, update, context))
+            
+            context.dispatcher.add_handler(deleteHelper_handler)
+
+    def deleteHelper(self, update, context):
+        if(context.bot.answer_callback_query(update.callback_query.id)):
+            #remove message text
+            context.bot.deleteMessage(update.effective_chat.id, update.callback_query.message.message_id)
+
+            #delete order
+            item = update.callback_query.data
+            user = update.effective_user
+            self.food[user][item]  = self.food[user][item] - 1
+            if self.food[user][item] == 0:
+                del self.food[user][item]
+            if not bool(self.food[user]):
+                del self.food[user]
+            
+            #send new message
+            context.bot.sendMessage(chat_id=update.effective_user.id,
+                                text= item + " has been deleted!" )
+
+    def build_menu(self, buttons,
+               n_cols,	
+               header_buttons=None,
+               footer_buttons=None):
+	menu = [buttons[i:i + n_cols] for i in range(0, len(buttons), n_cols)]
+	if header_buttons:
+		menu.insert(0, [header_buttons])
+	if footer_buttons:
+		menu.append([footer_buttons])
+	return menu
+
+
+    def InlineKeyboard(self, list_of_options):
+        keyboard = [InlineKeyboardButton(item[1], callback_data = item[1]) for item in list_of_options]
+        return InlineKeyboardMarkup(build_menu(keyboard, n_cols = 1))
+
+    
+        
+
