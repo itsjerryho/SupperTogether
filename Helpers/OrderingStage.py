@@ -1,3 +1,4 @@
+from openpyxl import load_workbook, workbook
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, InlineQuery
 
@@ -11,7 +12,7 @@ class order:
 
     def addOrder(self, update, context):
         #Access Menu
-        order_list = menu()
+        order_list = self.rest_menu()
 
         # Create and send menu.
         # Header: Prompt user to select food/drink.
@@ -109,6 +110,14 @@ class order:
         keyboard = [InlineKeyboardButton(item[1], callback_data = item[1]) for item in list_of_options]
         return InlineKeyboardMarkup(build_menu(keyboard, n_cols = 1))
 
-    
+    def rest_menu(self):
+        #Menu
+        Menu_wb = load_workbook(filename = 'Menu.xlsx')
+        restaurant_ws = Menu_wb ['RESTAURANT A']
+        ORDERID = restaurant_ws['A']
+        ITEMNAME = restaurant_ws['B']
+
+        #return list of orders[ORDERID, ITEMNAME]
+        return [ [ORDERID[i].value, ITEMNAME[i].value] for i in range(0, len(ORDERID)) ]
         
 
