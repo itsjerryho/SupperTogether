@@ -22,7 +22,7 @@ class order:
 
         #handle answer using addOrder_helper
         answer_handler = CallbackQueryHandler(lambda update, context: addOrder_helper(update, context))
-        context.dispatcher.add_handler(answer_handler)
+        context.dispatcher.add_handler(addOrder_helper)
 
     def addOrder_helper(self, update, context):
         #check for if person has answered
