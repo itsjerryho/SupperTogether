@@ -1,23 +1,26 @@
 from openpyxl import load_workbook, workbook
+from Helpers.Helper import InlineKeyboard
+from Helpers.ExcelBuilder import Menu
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext, ConversationHandler
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, InlineQuery
 
 sub_1, sub_2, sub_3 = range(3)
 
 class order:
-    def __init__(self, user, restuarant = None, address = None, phone = None):
+    def __init__(self, user, restaurant = None, address = None, phone = None):
         self.user = user
-        self.restuarant = restuarant
+        self.restaurant = restaurant
+        self.menu = Menu( "Menu.xlsx", restaurant)
         self.address = address
         self.phone = phone
         self.food = {}
 
     def addOrder(self, update, context):
         #Access Menu
-        order_list = self.rest_menu()
+        order_list = self.menu.list()
 
         # Create reply_markup.
-        reply_markup = self.InlineKeyboard(order_list)
+        reply_markup = InlineKeyboard(order_list)
         
         # Header: Prompt user to select food/drink.
         context.bot.sendMessage(chat_id = update.effective_user.id,
@@ -39,7 +42,7 @@ class order:
 
             #save order
             customer = update.effective_user
-            updateList(customer, item)
+            self.updateList(customer, item)
             
             return ConversationHandler.END
 
@@ -53,14 +56,14 @@ class order:
             else:
                 temp[item] = 1
         else:
-            self.food[name] = {customer:1}
+            self.food[customer] = {item:1}
     
     def viewOrder(self, update, context):
         output = ""
         for customer in self.food :
             temp = self.food[customer]
             for item in temp :
-                output = output + customer.first_name + " " + customer.last_name + " " + item + " x" + temp[item] + "\n"
+                output = output + customer.first_name + " " + customer.last_name + " " + item + " x" + str(temp[item]) + "\n"
         context.bot.sendMessage(chat_id = update.effective_chat.id, text = output)
 
     def removeOrder(self, update, context):
@@ -75,8 +78,8 @@ class order:
         
         else:
             # Create and send menu
-            reply_markup = self.InlineKeyboard(list_of_items)
-            context.bot.sendMessage(chat_id  = update.effect_user.id, text = "Select which item to delete", reply_markup = reply_markup)
+            reply_markup = InlineKeyboard(list_of_items)
+            context.bot.sendMessage(chat_id  = update.effective_user.id, text = "Select which item to delete", reply_markup = reply_markup)
 
             return sub_1
         
@@ -99,30 +102,6 @@ class order:
                                 text = item + " has been deleted!" )
             
             return ConversationHandler.END
-
-    def build_menu(self, buttons,
-               n_cols,	
-               header_buttons = None,
-               footer_buttons = None):
-	menu = [buttons[i:i + n_cols] for i in range(0, len(buttons), n_cols)]
-	if header_buttons:
-		menu.insert(0, [header_buttons])
-	if footer_buttons:
-		menu.append([footer_buttons])
-	return menu
-
-    def InlineKeyboard(self, list_of_options):
-        keyboard = [InlineKeyboardButton(item, callback_data = item) for item in list_of_options]
-        return InlineKeyboardMarkup(build_menu(keyboard, n_cols = 1))
-
-    def rest_menu(self):
-        #Menu
-        Menu_wb = load_workbook(filename = 'Menu.xlsx')
-        restaurant_ws = Menu_wb ['RESTAURANT A']
-        ITEMNAME = restaurant_ws['B']
-
-        #return list of orders[ORDERID, ITEMNAME]
-        return [ITEMNAME[i].value for i in range(0, len(ITEMNAME)) ]
     
     def build_handlers(self, dispatcher):
         order_conv_handler = ConversationHandler(entry_points = [CommandHandler("AddOrder", self.addOrder)], states = {
