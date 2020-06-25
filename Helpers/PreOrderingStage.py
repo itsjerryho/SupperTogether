@@ -1,4 +1,5 @@
 from Helpers.OrderingStage import order
+from Helpers.Helper import InlineKeyboard
 from openpyxl import load_workbook, workbook
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext, ConversationHandler
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, InlineQuery
@@ -20,7 +21,7 @@ def StartJio_helper(update, context):
     restaurant  = update.callback_query.data
 
     # remove message
-    context.bot.deleteMessage(update.effective_user.id, update.callback_query.message.messageid)
+    context.bot.deleteMessage(update.effective_user.id, update.callback_query.message.message_id)
 
     # Move on to start ordering.
 
@@ -48,21 +49,6 @@ def Cancel(update, context):
     # Ends conversation right away
     context.bot.sendMessage(chat_id = update.effective_chat.id, text = "See you next time!")
     return ConversationHandler.END
-
-def build_menu(buttons,
-               n_cols,	
-               header_buttons = None,
-               footer_buttons = None):
-	menu = [buttons[i:i + n_cols] for i in range(0, len(buttons), n_cols)]
-	if header_buttons:
-		menu.insert(0, [header_buttons])
-	if footer_buttons:
-		menu.append([footer_buttons])
-	return menu
-
-def InlineKeyboard(list_of_options):
-    keyboard = [InlineKeyboardButton(option, callback_data = option) for option in list_of_options]
-    return InlineKeyboardMarkup(build_menu(keyboard, n_cols = 1))
 
 start_conv = ConversationHandler(entry_points = [CommandHandler("startjio", StartJio)], states = {
     sub_1 : [CallbackQueryHandler(StartJio_helper)]
