@@ -72,8 +72,8 @@ def EndMakan(update, context):
     order = context.bot_data[update.effective_chat.id]
     
     # Send order to user
-    context.bot.sendMessage(update.effective_chat.id, text = str(order))
-    
+    # context.bot.sendMessage(update.effective_chat.id, text = str(order))
+    context.bot_data[order.restaurant]['orders'].put(order)
 
     # Clear bot data and user cache
     del context.bot_data[update.effective_chat.id]
