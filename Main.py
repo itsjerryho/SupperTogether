@@ -1,6 +1,7 @@
 # import
-from telegram.ext import Updater, CommandHandler
-from Helpers.PreOrderingStage import start_conv, CloseJio
+from telegram.ext import Updater, CommandHandler, PicklePersistence
+from Helpers.PreOrderingStage import addPreOrderHandlersTo
+from Helpers.OrderingStage import addOrderHandlersTo
 from Helpers.StoreInterface import StoreMode
 
 import logging
@@ -14,14 +15,22 @@ def error(update, context):
     logger.warning('Update "%s" caused error "%s"', update, context.error)
 
 def main():
-    updater = Updater("1054268461:AAFSMepDnv3L4bq7bs9_ykhrnZVt24whpHU", use_context=True)
+    pp = PicklePersistence(filename = "bot_data")
+    updater = Updater("1054268461:AAFSMepDnv3L4bq7bs9_ykhrnZVt24whpHU",persistence=pp,use_context=True)
 
     dp = updater.dispatcher
-    dp.add_handler(start_conv)
+    
+    # Start Handler and help
+    dp.add_handler(CommandHandler("start", Start))
+    dp.add_handler(CommandHandler("Help", Help))
+
+    # Add Handlers
+    addPreOrderHandlersTo(dp)
+    addOrderHandlersTo(dp)
     dp.add_handler(CommandHandler('Store', StoreMode))
-    dp.add_handler(CommandHandler('CloseJio', CloseJio))
+    
+    # Error Handler
     dp.add_error_handler(error)
-    # dp.add_handler(CommandHandler(“Help”, help)
 
     # start checking for updates
     updater.start_polling()
@@ -31,6 +40,9 @@ def main():
 def Start(update, context):
     #Prompt user to startJio
     context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Hi, weclome to SupperTogether! To start jio people, just /StartJio")
+
+def Help(update,context):
+    context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Cow goes Moo")
 
 if __name__ == '__main__':
     main()
