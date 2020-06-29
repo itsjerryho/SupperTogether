@@ -4,7 +4,7 @@ from Helpers.PreOrderingStage import addPreOrderHandlersTo
 from Helpers.OrderingStage import addOrderHandlersTo
 # from Helpers.StoreInterface import StoreMode
 from Helpers.StoreInterface import addShopHandlersTo
-from Helpers.Data import menu
+from Helpers.Data import menu, stores
 from multiprocessing import Queue
 
 import logging
@@ -24,10 +24,12 @@ def main():
     dp = updater.dispatcher
     
     # Start Handler and help
+    print("Adding Handlers...")
     dp.add_handler(CommandHandler("start", Start))
     dp.add_handler(CommandHandler("Help", Help))
 
     # Add Handlers
+    print("Adding More Handlers...")
     addPreOrderHandlersTo(dp)
     addOrderHandlersTo(dp)
     addShopHandlersTo(dp)
@@ -36,14 +38,20 @@ def main():
     # Error Handler
     dp.add_error_handler(error)
 
+    # Print store data
+    print(stores.df)
+    
+    print("Loading bot data...")
     # Initialize bot_data
-    for r in menu.rests():
-        dp.bot_data[r] = {
+    for id in stores.toList("ID"):
+        dp.bot_data[id] = {
             'Store Open': False,
             'orders': Queue(maxsize = 10)
         }
 
     # start checking for updates
+
+    print("Finished processing")
     updater.start_polling()
 
     updater.idle()
