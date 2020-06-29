@@ -1,5 +1,5 @@
 from Helpers.OrderingStage import Order
-from Helpers.Data import menu
+from Helpers.Data import menu, stores
 from openpyxl import load_workbook, workbook
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext, ConversationHandler, MessageHandler, Filters
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, InlineQuery
@@ -70,10 +70,10 @@ def EndMakan(update, context):
 
     # Save result
     order = context.bot_data[update.effective_chat.id]
-    
-    # Send order to user
-    # context.bot.sendMessage(update.effective_chat.id, text = str(order))
-    context.bot_data[order.restaurant]['orders'].put(order)
+    context.bot_data[stores.ID(order.restaurant)]['orders'].put(order)
+
+    # Prompt store order incoming
+    context.bot.sendMessage(chat_id = stores.ID(order.restaurant), text = "You have just received an order!\nClick View Order to view.")
 
     # Clear bot data and user cache
     del context.bot_data[update.effective_chat.id]
