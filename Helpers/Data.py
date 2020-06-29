@@ -33,6 +33,14 @@ class Menu:
             1 gives you the list of addon prices of option 1
             2 gives you the list of addon prices of option 2
         """
+        if type(ID) is list:
+            ans = [None]*len(ID)
+            id = ID[0]
+            ans[0] = self.price[restaurant].iloc[:,0].loc[id]
+            ans[1] = self.price[restaurant].iloc[:,1].loc[id][int(ID[1])]
+            ans[2] = self.price[restaurant].iloc[:,2].loc[id][int(ID[2])]
+            return sum(ans)
+        
         #check if key exists
         if ID in (self.price[restaurant].index):
             if option == 0:
@@ -47,23 +55,31 @@ class Menu:
     def item(self, restaurant, ID, option = 0):
         """Returns the name of an object
         restaurant: (str) Restaurant Name
-        ID: (int) Object ID
+        ID: (int|list) Object ID
+            if ID is list, method will concatenate all together
         Option: (int, list, list)
             0 gives you the item's name
             1 gives you the list of addon names of option 1
             2 gives you the list of addon names of option 2
         """
-        
-        #check if key exists
-        if ID in (self.food[restaurant].index):
-            if option == 0:
-                return self.food[restaurant].iloc[:,option].loc[ID]
-            elif option == 1:
-                return self.food[restaurant].iloc[:,option].loc[ID]
-            elif option == 2:
-                return self.food[restaurant].iloc[:,option].loc[ID]
+        if type(ID) is list:
+            ans = [None]*len(ID)
+            id = ID[0]
+            ans[0] = self.food[restaurant].iloc[:,0].loc[id]
+            ans[1] = self.food[restaurant].iloc[:,1].loc[id][int(ID[1])]
+            ans[2] = self.food[restaurant].iloc[:,2].loc[id][int(ID[2])]
+            return ' '.join(ans)
         else:
-            return print("Error: ID does not exist")
+            #check if key exists
+            if ID in (self.food[restaurant].index):
+                if option == 0:
+                    return self.food[restaurant].iloc[:,option].loc[ID]
+                elif option == 1:
+                    return self.food[restaurant].iloc[:,option].loc[ID]
+                elif option == 2:
+                    return self.food[restaurant].iloc[:,option].loc[ID]
+            else:
+                return print("Error: ID does not exist")
 
     def listing(self, restaurant, data, col=0):
         """ Gives you a list of data
@@ -77,7 +93,6 @@ class Menu:
             1: Option 1
             2: Option 2
         """
-        
         if data == 0:
             # Print OrderID
             return self.food[restaurant].index.to_numpy()
@@ -93,22 +108,21 @@ class Menu:
 
 class StoreData:
     def __init__(self, list_of_stores = np.empty(0, dtype=str), list_of_ids = np.empty(0, dtype=str)):
+        self.list_of_stores = list_of_stores
+        self.list_of_ids = list_of_ids
         self.df = pd.DataFrame(
-            {'Store': list_of_stores}, index = list_of_ids)
-    
-    def add(self, store, id):
-        self.df.loc[id] = [store]
-        return self.df
+            {'ID': list_of_ids, 'Stores': list_of_stores})
 
-    def store(self,id):
-        return self.df.loc[id].loc['Store']
+    def ID(self, store):
+        df1 = self.df.set_index("Stores")
+        return int(df1.loc[store].loc['ID'])
+    
+    def stores(self, ID):
+        df1 = self.df.set_index("ID")
+        return df1.loc[ID].loc['Stores']
 
     def toList(self, data):
-        if data == "ID":
-            return self.df.index.to_numpy()
-        else :
-            return self.df.loc[:,data].to_numpy()
+        return self.df.loc[:,data]
 
 menu = Menu("Menu.xlsx")
 stores = StoreData(menu.rests(), [1101780228,41345883])
-# stores.df.to_excel("Stores.xlsx")
