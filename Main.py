@@ -2,7 +2,8 @@
 from telegram.ext import Updater, CommandHandler
 from Helpers.PreOrderingStage import addPreOrderHandlersTo
 from Helpers.OrderingStage import addOrderHandlersTo
-from Helpers.StoreInterface import StoreMode
+# from Helpers.StoreInterface import StoreMode
+from Helpers.StoreInterface import addShopHandlersTo
 from Helpers.Data import menu
 from multiprocessing import Queue
 
@@ -29,7 +30,8 @@ def main():
     # Add Handlers
     addPreOrderHandlersTo(dp)
     addOrderHandlersTo(dp)
-    dp.add_handler(CommandHandler('Store', StoreMode))
+    addShopHandlersTo(dp)
+    # dp.add_handler(CommandHandler('Store', StoreMode))
     
     # Error Handler
     dp.add_error_handler(error)
