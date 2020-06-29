@@ -1,7 +1,7 @@
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ConversationHandler, CallbackQueryHandler, CallbackContext, PicklePersistence
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 from multiprocessing import Queue
-from Helpers.Data import menu
+from Helpers.Data import menu, stores
 import logging
 
 #Loggin
@@ -235,7 +235,7 @@ def list_order(update, context):
     textForm = "Items Ordered \n"
     # convert dict into text
     for foodID, quantity in newDict.items():
-        textForm += menu.item(storeID, foodID) + ": {}".format(quantity) + "\n"
+        textForm += menu.item(stores.stores(storeID), foodID) + ": {}".format(quantity) + "\n"
 
     # Create Back button
     keyboard = [[InlineKeyboardButton("Back", callback_data=customer_name_of_orderChosen)]]
