@@ -58,7 +58,7 @@ def main():
 
 def Start(update, context):
     #Prompt user to startJio
-    context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Hi, weclome to SupperTogether! To start inviting, just /LetsMakan")
+    context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Hi, welcome to SupperTogether! To start inviting, just /LetsMakan")
 
 def Help(update,context):
     context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Cow goes Moo, cat goes meow, dogs go___?")

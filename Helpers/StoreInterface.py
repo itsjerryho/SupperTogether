@@ -31,7 +31,8 @@ def closeStore(update, context):
     bot_data = context.bot_data
     print("Printing in CloseStore!!!!")
     print(bot_data)
-    bot_data["Ah Beng Drink"]["Store Open"] = False
+    storeID = update.effective_user.id
+    bot_data[storeID]["Store Open"] = False
     print(bot_data)
     update.message.reply_text("You will stop receiving orders. Have a good rest!")
     return ConversationHandler.END
@@ -41,8 +42,8 @@ def openStore(update, context):
     bot_data = context.bot_data
     print("Printing in openStore!!!!")
     print(bot_data)
-    # TODO: specify exactly which store is it in bot_data using update.user.id (store's own id)
-    bot_data["Ah Beng Drink"]["Store Open"] = True
+    storeID = update.effective_user.id
+    bot_data[storeID]["Store Open"] = True
     print(bot_data)
     reply_keyboard = [['Close Shop'],
                   ['View Orders']]
@@ -88,7 +89,8 @@ def send_rejection(update, context):
     reason = update.message.text
     customerID = ""
     # orders is a queue of Order objects
-    orders = context.bot_data["Ah Beng Drink"]["orders"]
+    storeID = update.effective_user.id
+    orders = context.bot_data[storeID]["orders"]
     # orders is a queue of Order objects
     # making this queue into a list
     orderList = []
@@ -99,7 +101,7 @@ def send_rejection(update, context):
         tempQueue.put(order)
 
     # assign tempQueue as the queue in orders so the data will not be lost
-    context.bot_data["Ah Beng Drink"]["orders"] = tempQueue
+    context.bot_data[storeID]["orders"] = tempQueue
 
     for order in orderList:
         if order.user.first_name == customer_name_of_orderChosen:
@@ -119,7 +121,8 @@ def accepted(update, context):
     customerName = update.callback_query.data.split("_")[1]
     print('in Accepted!')
     customerID = ""
-    orders = context.bot_data["Ah Beng Drink"]["orders"]
+    storeID = update.effective_user.id
+    orders = context.bot_data[storeID]["orders"]
     # orders is a queue of Order objects
     # making this queue into a list
     orderList = []
@@ -137,7 +140,7 @@ def accepted(update, context):
     print('customerID: {}'.format(customerID))
 
     # assign tempQueue as the queue in orders so the data in Queue will not be lost
-    context.bot_data["Ah Beng Drink"]["orders"] = tempQueue
+    context.bot_data[storeID]["orders"] = tempQueue
 
     context.bot.sendMessage(chat_id = customerID, text = "Your order has been accepted! Estimated Waiting Time: {}".format(timeChosen))
 
@@ -149,27 +152,25 @@ def accepted(update, context):
 
 def view_orders(update, context):
     bot_data = context.bot_data
-    #TODO: Replace StoreA with storeID
-    storeA = bot_data["Ah Beng Drink"]
-    print(storeA)
-    orders = bot_data["Ah Beng Drink"]["orders"]
+    storeID = update.effective_user.id
+    queue = bot_data[storeID]["orders"]
     # orders is a queue of Order objects
     # making this queue into a list of Order objects
     orderList = []
     tempQueue = Queue(maxsize= 10)
-    while orders.qsize() != 0:
-        order = orders.get()
+    while queue.qsize() != 0:
+        order = queue.get()
         orderList.append(order)
         tempQueue.put(order)
 
     # assign tempQueue as the queue in orders so the data will not be lost
-    bot_data["Ah Beng Drink"]["orders"] = tempQueue
+    bot_data[storeID]["orders"] = tempQueue
 
     # create another list that contains just the customerName for the sake of 
     # creating the keyboard
     newList = []
-    for x in orderList:
-        newList.append(x.user.first_name)
+    for order in orderList:
+        newList.append(order.user.first_name)
     # generate menu based on Customer Name
     markup = InlineKeyboard(newList)
     context.bot.sendMessage(chat_id = update.effective_user.id, text = "Choose an order:", reply_markup = markup)
@@ -200,7 +201,8 @@ def list_order(update, context):
     print('customer Name: {}'.format(customer_name_of_orderChosen))
     # find the order
     orderDict = {}
-    orders = context.bot_data["Ah Beng Drink"]["orders"]
+    storeID = update.effective_user.id
+    orders = context.bot_data[storeID]["orders"]
     # orders is a queue of Order objects
     # making this queue into a list
     orderList = []
@@ -211,7 +213,7 @@ def list_order(update, context):
         tempQueue.put(order)
 
     # assign tempQueue as the queue in orders so the data will not be lost
-    context.bot_data["Ah Beng Drink"]["orders"] = tempQueue
+    context.bot_data[storeID]["orders"] = tempQueue
 
     for order in orderList:
         if order.user.first_name == customer_name_of_orderChosen:
@@ -233,7 +235,7 @@ def list_order(update, context):
     textForm = "Items Ordered \n"
     # convert dict into text
     for foodID, quantity in newDict.items():
-        textForm += menu.item('Ah Beng Drink', foodID) + ": {}".format(quantity) + "\n"
+        textForm += menu.item(storeID, foodID) + ": {}".format(quantity) + "\n"
 
     # Create Back button
     keyboard = [[InlineKeyboardButton("Back", callback_data=customer_name_of_orderChosen)]]
