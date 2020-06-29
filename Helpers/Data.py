@@ -91,25 +91,24 @@ class Menu:
     def rests(self):
         return self.restaurants
 
-# class StoreData:
-#     def __init__(self, list_of_stores = np.empty(0, dtype=str), list_of_ids = np.empty(0, dtype=str)):
-#         self.df = pd.DataFrame(
-#             {'Store': list_of_stores,
-#              'ID:': list_of_ids,
-#              'Avail': np.full(len(list_of_stores), False)})
+class StoreData:
+    def __init__(self, list_of_stores = np.empty(0, dtype=str), list_of_ids = np.empty(0, dtype=str)):
+        self.df = pd.DataFrame(
+            {'Store': list_of_stores}, index = list_of_ids)
     
-#     def add(self, store, id):
-#         self.df = self.df.append(
-#             {'Store': store,
-#              'ID:': id,
-#              'Avail': False}, ignore_index = True)
-#         return self.df
+    def add(self, store, id):
+        self.df.loc[id] = [store]
+        return self.df
 
-#     def avail(self, id):
-#         self.df
+    def store(self,id):
+        return self.df.loc[id].loc['Store']
 
-# def main():
-#     storedata = StoreData().add("hello", 9)
+    def toList(self, data):
+        if data == "ID":
+            return self.df.index.to_numpy()
+        else :
+            return self.df.loc[:,data].to_numpy()
 
 menu = Menu("Menu.xlsx")
-# main()
+stores = StoreData(menu.rests(), [1101780228,41345883])
+# stores.df.to_excel("Stores.xlsx")
