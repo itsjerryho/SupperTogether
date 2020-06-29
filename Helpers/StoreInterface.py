@@ -29,22 +29,16 @@ def InlineKeyboard(list_of_options):
 
 def closeStore(update, context):
     bot_data = context.bot_data
-    print("Printing in CloseStore!!!!")
-    print(bot_data)
     storeID = update.effective_user.id
     bot_data[storeID]["Store Open"] = False
-    print(bot_data)
     update.message.reply_text("You will stop receiving orders. Have a good rest!")
     return ConversationHandler.END
 
 def openStore(update, context):
     
     bot_data = context.bot_data
-    print("Printing in openStore!!!!")
-    print(bot_data)
     storeID = update.effective_user.id
     bot_data[storeID]["Store Open"] = True
-    print(bot_data)
     reply_keyboard = [['Close Shop'],
                   ['View Orders']]
     markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
@@ -54,9 +48,9 @@ def openStore(update, context):
 
 
 def accepting(update, context):
-        print("inside Accepting!")
+        # remove 'Choose an order'
+        context.bot.deleteMessage(update.effective_chat.id, update.callback_query.message.message_id)
         customer_name_of_orderChosen = update.callback_query.data.split("accept_")[1]
-        print("Customer Name: {}".format(customer_name_of_orderChosen))
         keyboard = [[InlineKeyboardButton("30 mins", callback_data = "30 mins_{}".format(customer_name_of_orderChosen))],
         [InlineKeyboardButton("1 hour", callback_data = "1 hour_{}".format(customer_name_of_orderChosen))],
         [InlineKeyboardButton("1.5 hours", callback_data = "1.5 hours_{}".format(customer_name_of_orderChosen))],
@@ -69,6 +63,9 @@ def accepting(update, context):
         return CHOOSING_WAITINGTIME
 
 def rejecting(update, context):
+    # remove 'choose an action'
+    context.bot.deleteMessage(update.effective_chat.id, update.callback_query.message.message_id)
+
     customer_name_of_orderChosen = update.callback_query.data.split("reject_")[1]
     keyboard = [[InlineKeyboardButton("Reject", callback_data = "Reject_{}".format(customer_name_of_orderChosen))],
     [InlineKeyboardButton("Back", callback_data="Back_{}".format(customer_name_of_orderChosen))]
@@ -78,6 +75,9 @@ def rejecting(update, context):
     return REJECTING
 
 def rejected(update, context):
+    # remove 'do u really want to reject this order'
+    context.bot.deleteMessage(update.effective_chat.id, update.callback_query.message.message_id)
+
     customer_name_of_orderChosen = update.callback_query.data.split("Reject_")[1]
     user_data = context.user_data
     user_data["CustomerName"] = customer_name_of_orderChosen
@@ -107,7 +107,6 @@ def send_rejection(update, context):
         if order.user.first_name == customer_name_of_orderChosen:
             customerID = order.user.id
 
-    print("Customer UserID: {}".format(customerID))
     # send Message to customer
     context.bot.sendMessage(chat_id = customerID, text = "Sorry, your order has been rejected. Reason: {}".format(reason))
     context.user_data.pop("CustomerName", None) 
@@ -117,9 +116,11 @@ def send_rejection(update, context):
     return COMPLETED
 
 def accepted(update, context):
+    # remove' estimated waiting time'
+    context.bot.deleteMessage(update.effective_chat.id, update.callback_query.message.message_id)
+
     timeChosen = update.callback_query.data.split("_")[0]
     customerName = update.callback_query.data.split("_")[1]
-    print('in Accepted!')
     customerID = ""
     storeID = update.effective_user.id
     orders = context.bot_data[storeID]["orders"]
@@ -151,6 +152,12 @@ def accepted(update, context):
     return COMPLETED
 
 def view_orders(update, context):
+    if hasattr(update.callback_query, 'message'):
+        # remove 'Choose an Action' 
+        context.bot.deleteMessage(update.effective_chat.id, update.callback_query.message.message_id)
+    else:
+        print('no attribute')
+
     bot_data = context.bot_data
     storeID = update.effective_user.id
     queue = bot_data[storeID]["orders"]
@@ -178,12 +185,12 @@ def view_orders(update, context):
 
 def specific_order(update, context):
     query = update.callback_query.data
+    # delete previous message
+    context.bot.deleteMessage(update.effective_chat.id, update.callback_query.message.message_id)
     # account for special case where Back is used
     if "Back" in query:
         query = query.split("Back_")[1]
     customer_name_of_orderChosen = query
-    print("Inside Specific_Order")
-    print("Customer Name: {}".format(customer_name_of_orderChosen))
     # TODO: Render keys based on order status
     keyboard = [[InlineKeyboardButton("Items Ordered", callback_data = "view_{}".format(customer_name_of_orderChosen))],
             [InlineKeyboardButton("Accept Order", callback_data = "accept_{}".format(customer_name_of_orderChosen))],
@@ -195,6 +202,9 @@ def specific_order(update, context):
     return AFTER_VIEWING_ORDER
 
 def list_order(update, context):
+    # remove previous message
+    context.bot.deleteMessage(update.effective_chat.id, update.callback_query.message.message_id)
+
     # get back the original string name without the "view" word
     customer_name_of_orderChosen = update.callback_query.data.split("view_")[1]
     print("in List Order!")
