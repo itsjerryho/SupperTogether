@@ -210,7 +210,7 @@ def list_order(update, context):
     print("in List Order!")
     print('customer Name: {}'.format(customer_name_of_orderChosen))
     # find the order
-    orderDict = {}
+    orderObj = None
     storeID = update.effective_user.id
     orders = context.bot_data[storeID]["orders"]
     # orders is a queue of Order objects
@@ -227,11 +227,12 @@ def list_order(update, context):
 
     for order in orderList:
         if order.user.first_name == customer_name_of_orderChosen:
-            orderDict = order.food
+            orderObj = order
 
+    orderFoodDict = orderObj.food
     # create another dictionary with just the item id and quantity
     newDict = {}
-    for userOrders in orderDict.values():
+    for userOrders in orderFoodDict.values():
         for foodID, quantity in userOrders.items():
             # check if foodID exist in newDict.
             # if exist, increment the count
@@ -241,8 +242,9 @@ def list_order(update, context):
                 newDict[foodID] = oldValue + quantity
             else:
                 newDict[foodID] = 1
-    
-    textForm = "Items Ordered \n"
+            
+    textForm = "Address: \n{} \n\nContact: \n{} \n\n".format(orderObj.address, order.phone)
+    textForm += "Items Ordered \n"
     # convert dict into text
     for foodID, quantity in newDict.items():
         textForm += menu.item(stores.stores(storeID), foodID) + ": {}".format(quantity) + "\n"
