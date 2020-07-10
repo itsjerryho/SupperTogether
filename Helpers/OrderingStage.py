@@ -1,18 +1,19 @@
 from openpyxl import load_workbook, workbook
 from Helpers.Data import menu
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext, ConversationHandler
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, InlineQuery
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, InlineQuery, ReplyKeyboardMarkup
 
 sub_1, sub_2, sub_3 = range(3)
 option_1, option_2, final = range(3)
 
 class Order:
-    def __init__(self, user, restaurant = None, address = None, phone = None):
+    def __init__(self, user, restaurant = None, address = None, phone = None, accepted = None):
         self.user = user
         self.restaurant = restaurant
         self.address = address
         self.phone = phone
         self.food = {}
+        self.accepted = accepted
 
     def updateList(self, customer, item):
         #check if name exists
@@ -34,30 +35,26 @@ class Order:
         if not bool(self.food[customer]):
             del self.food[customer]
 
-    def __str__(self):
-        username = self.user.first_name
-        orders = ""
+    def printOrder(self):
+        output = ""
+        total = 0
         for customer in self.food :
             temp = self.food[customer]
-            for item in temp :
-                orders = orders + customer.first_name + " " + item + " x" + str(temp[item]) + "\n"
-        return (
-            "User: " + username + "\n" + 
-            "List of orders:\n" + orders + 
-            "Phone: " + str(self.phone) + "\n"
-            "Address: " + str(self.address)
-        )
+            for id in temp :
+                output = output + customer.full_name + " " + menu.item(self.restaurant, id) + " x" + "{:d}".format(temp[id]) + "\n"
+                total = total + menu.cost(self.restaurant, id) * temp[id]
+        return output + "\nTotal: $" + "{:.2f}".format(total)
     
 def addOrderHandlersTo(dispatcher):
     order_conv_handler = ConversationHandler(entry_points = [CommandHandler("AddOrder", addOrder)], states = {
         option_1 : [CallbackQueryHandler(lambda update, context: options(update, context, option_1))],
         option_2 : [CallbackQueryHandler(lambda update, context: options(update, context, option_2))],
         final : [CallbackQueryHandler(lambda update, context: addOrder_helper(update, context, final))]
-    }, fallbacks = [CommandHandler("AddOrder", addOrder)], per_user = True, per_chat = False)
+    }, fallbacks = [CommandHandler("Cancel", Cancel)], per_user = True, per_chat = False)
 
     remove_conv_handler = ConversationHandler(entry_points = [CommandHandler("RemoveOrder", removeOrder)], states = {
         sub_1 : [CallbackQueryHandler(removeOrder_Helper)]
-    }, fallbacks = [CommandHandler("RemoveOrder", removeOrder)], per_user = True, per_chat = False)
+    }, fallbacks = [CommandHandler("Cancel", Cancel)], per_user = True, per_chat = False)
 
     viewOrder_handler = CommandHandler("vieworder", viewOrder)
 
@@ -95,7 +92,7 @@ def addOrder(update, context):
     
     # Header: Prompt user to select food/drink.
     context.bot.sendMessage(chat_id = update.effective_user.id,
-                                text = "Please select your food/drink:", reply_markup = reply_markup)
+                                text = "Please select your food/drink:\nPress /Cancel to cancel request", reply_markup = reply_markup)
 
     return option_1
 
@@ -124,7 +121,7 @@ def options(update, context, option):
     reply_markup = InlineKeyboardMarkup(buttons)
 
     # Edit message
-    update.effective_message.edit_text(text = "Please select an option: ",reply_markup = reply_markup)
+    update.effective_message.edit_text(text = "Please select an option:\nPress /Cancel to cancel request ",reply_markup = reply_markup)
 
     return option + 1
 
@@ -165,18 +162,11 @@ def viewOrder(update, context):
     
     # Check chat_id
     chat_id = update.effective_chat.id
-    food = context.bot_data[chat_id].food
-    restaurant = context.bot_data[chat_id].restaurant
+    order = context.bot_data[chat_id]
 
     # Check dictionary
-    output = ""
-    total = 0
-    for customer in food :
-        temp = food[customer]
-        for id in temp :
-            output = output + customer.first_name + " " + menu.item(restaurant, id) + " x" + "{:d}".format(temp[id]) + "\n"
-            total = total + menu.cost(restaurant, id) * temp[id]
-    context.bot.sendMessage(chat_id = update.effective_chat.id, text = output + "\nTotal: $" + "{:.2f}".format(total))
+    text = order.printOrder()
+    context.bot.sendMessage(chat_id = update.effective_chat.id, text = text)
 
 def removeOrder(update, context):
     # Send Error
@@ -204,7 +194,7 @@ def removeOrder(update, context):
         context.user_data["orders"] = list(list_of_items)
         buttons = [[InlineKeyboardButton(menu.item(restaurant, context.user_data["orders"][i]), callback_data= i)] for i in range(len(context.user_data["orders"]))]
         reply_markup = InlineKeyboardMarkup(buttons)
-        context.bot.sendMessage(chat_id  = update.effective_user.id, text = "Select which item to delete", reply_markup = reply_markup)
+        context.bot.sendMessage(chat_id  = update.effective_user.id, text = "Select which item to delete.\n Press /Cancel to cancel request", reply_markup = reply_markup)
 
         return sub_1
     
@@ -234,7 +224,17 @@ def removeOrder_Helper(update, context):
     
     return ConversationHandler.END
 
-def messageError(update,context, chat_type = "group"):
+def Cancel(update, context):
+    # Ends conversation right away
+    context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Request canceled")
+
+    if update.callback_query is not None:
+        context.bot.deleteMessage(update.effective_chat.id, update.callback_query.message.message_id)
+
+    context.user_data.clear()
+    return ConversationHandler.END
+
+def messageError(update, context, chat_type = "group"):
     # Check where the message is coming from
     error = update.effective_message.chat.type != chat_type
     if(error):
