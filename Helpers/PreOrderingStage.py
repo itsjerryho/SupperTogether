@@ -1,54 +1,52 @@
 from Helpers.OrderingStage import Order
 from Helpers.Data import menu, stores
 from openpyxl import load_workbook, workbook
-from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext, ConversationHandler, MessageHandler, Filters
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, InlineQuery
+from telegram.ext import (Updater, CommandHandler, CallbackQueryHandler, CallbackContext, ConversationHandler, 
+    MessageHandler, Filters, PollAnswerHandler, PollHandler)
+from telegram import (ParseMode, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, 
+    ReplyKeyboardMarkup, ReplyKeyboardRemove)
+from telegram.utils.helpers import mention_html
 
 sub_1, sub_2, sub_3, sub_4 = range(4)
 
-def LetsMakan (update, context):
+def LetsMakan(update, context):
     # Check where the message is coming from
     if (update.effective_message.chat.type != "group"):
         context.bot.sendMessage(update.effective_user.id, text = "Send your commands in a group")
         return ConversationHandler.END
 
-    context.user_data["chat_id"] = update.effective_chat.id
+    # Check for available restaurants
+    # available_restaurants = []
+    # for id in stores.toList("ID"):
+    #     if context.bot_data[id]['Store Open']:
+    #         available_restaurants.append(stores.stores(id))
+
     # prompt user to choose a restaurant
-    list_of_restaurants = menu.rests()
-    buttons = [[InlineKeyboardButton(r, callback_data=r)] for r in list_of_restaurants]
-    reply_markup = InlineKeyboardMarkup(buttons)
-    context.bot.sendMessage(chat_id = update.effective_user.id, text = "Please select a restaurant: ", reply_markup = reply_markup)
+    available_restaurants = menu.rests()
+    if not available_restaurants:
+        context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Sorry, there are not restaurants available at this time")
+        return ConversationHandler.END
+    else:
+        buttons = [[InlineKeyboardButton(r, callback_data=r)] for r in available_restaurants]
+        reply_markup = InlineKeyboardMarkup(buttons)
+        context.bot.sendMessage(chat_id = update.effective_user.id, text = "Please select a restaurant: ", reply_markup = reply_markup)
 
-    # Add user to botdata
+        context.user_data["chat_id"] = update.effective_chat.id
+        return sub_1
+
+def LetsMakan_helper(update, context):
+    restaurant = update.callback_query.data
+
+    # Delete message
+    context.bot.deleteMessage(update.effective_chat.id, update.callback_query.message.message_id)
+
     # Create order object
-    new_order = Order(update.effective_user)
+    new_order = Order(update.effective_user, restaurant = restaurant)
     context.bot_data[context.user_data["chat_id"]] = new_order
-
-    return sub_1
-
-def Phone(update, context):
-    restaurant  = update.callback_query.data
-    context.bot_data[context.user_data["chat_id"]].restaurant = restaurant
-    context.bot.editMessageReplyMarkup(chat_id = update.effective_user.id, message_id = update.callback_query.message.message_id, reply_markup = None)
-    context.bot.sendMessage(chat_id = update.effective_user.id, text = "Please key in your phone number: ")
-    
-    return sub_2
-
-def address(update, context):
-    phoneNumber = update.effective_message.text
-    context.bot_data[context.user_data["chat_id"]].phone = phoneNumber
-    context.bot.sendMessage(chat_id = update.effective_user.id, text = "Please key in your address details: ")
-    
-    return sub_3
-
-def LetsMakanEnd(update, context):
-    # save results
-    order = context.bot_data[context.user_data["chat_id"]] 
-    order.address = update.effective_message.text
 
     # Prompt user to start ordering!
     context.bot.sendMessage(chat_id = context.user_data["chat_id"], text = 
-        order.restaurant + " is chosen! Use the following commands: " + 
+        new_order.restaurant + " is chosen! Use the following commands: " + 
         "\n/addOrder - add order" + 
         "\n/viewOrder - view all orders" + 
         "\n/removeOrder - remove an order" +
@@ -58,26 +56,82 @@ def LetsMakanEnd(update, context):
 
 def EndMakan(update, context):
     # Accept only commands from group chat
-    if (update.effective_message.chat.type != "group"):
-        context.bot.sendMessage(update.effective_user.id, text = "Send your commands in a group")
-        return ConversationHandler.END
-
+    messageError(update, context)
+    
     # Only Host can close Makan
     if context.bot_data[update.effective_chat.id].user.id != update.effective_user.id:
         # End Convo
-        context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Only Host can end Makan")
+        context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Eh hu give u the mandate the close the makan?\nPlease ask {}".format(update.effective_user.full_name))
+        return ConversationHandler.END
+    
+    order = context.bot_data[update.effective_chat.id]
+    
+    # Check if user has ordered anything
+    if not order.food:
+        context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Oi recruit, ur order is empty leh. Dun anyhow play can anot?!")
+        
+        return ConversationHandler.END
+    else:
+        # Ask user to confirm
+        buttons = [["Confirm plus chop"], ["Hol up"]]
+        reply_markup = ReplyKeyboardMarkup(buttons, one_time_keyboard= True)
+        context.bot.sendMessage(update.effective_user.id, text = "Please confirm your order:\n{}".format(order.printOrder()), reply_markup = reply_markup)
+
+        # Add user to botdata   
+        context.user_data["chat_id"] = update.effective_chat.id
+        return sub_1
+
+def EndMakan_helper(update, context):
+    if update.effective_message.text == "Confirm plus chop" :
+        return Phone(update, context)
+    else:
+        # End convo tell user to continue ordering
+        context.bot.sendMessage(chat_id = update.effective_user.id, text = "Okay, continue ordering... take ur time recruit",
+            reply_markup = ReplyKeyboardRemove())
         return ConversationHandler.END
 
-    # Save result
-    order = context.bot_data[update.effective_chat.id]
-    context.bot_data[stores.ID(order.restaurant)]['orders'].put(order)
+def Phone(update, context):
+    # Prompt user to Key in phone number
+    context.bot.sendMessage(chat_id = update.effective_user.id, text = "Please key in your phone number: ", 
+        reply_markup = ReplyKeyboardRemove())
+    return sub_2
 
-    # Prompt store order incoming
-    context.bot.sendMessage(chat_id = stores.ID(order.restaurant), text = "You have just received an order!\nClick View Order to view.")
+def save_phone(update, context):
+    order = context.bot_data[context.user_data["chat_id"]]
+    order.phone = update.effective_message.text
+
+    return address(update, context)
+
+def address(update, context):
+    # Prompt user to key in address
+    context.bot.sendMessage(chat_id = update.effective_user.id, text = "Please key in your address details: ")
+    return sub_3
+
+def save_address(update, context):
+    # save address
+    order = context.bot_data[context.user_data["chat_id"]] 
+    order.address = update.effective_message.text
+    
+    # Add order to queue
+    return addToQueue(update,context)
+
+def addToQueue(update, context):
+    # Add to Store's Queue
+    order = context.bot_data[context.user_data["chat_id"]] 
+    store = context.bot_data[stores.ID(order.restaurant)]
+    store['orders'].put(order)
+
+    # Notify User order is being processed
+    update.message.reply_text("Your order is being processed by the store owner, just relax for awhile")
+
+    # Notify Store Owner
+    context.bot.sendMessage(chat_id = stores.ID(order.restaurant), text = "You have just received an order, click 'View Orders' to see your orders")
 
     # Clear bot data and user cache
     del context.bot_data[update.effective_chat.id]
     context.user_data.clear()
+
+    return ConversationHandler.END
 
 def Cancel(update, context):
     # Ends conversation right away
@@ -89,11 +143,22 @@ def Cancel(update, context):
 def addPreOrderHandlersTo(dispatcher):
     # Build handlers
     start_conv = ConversationHandler(entry_points = [CommandHandler("LetsMakan", LetsMakan)], states = {
-        sub_1 : [CallbackQueryHandler(Phone)],
-        sub_2 : [MessageHandler(Filters.text, address)],
-        sub_3 : [MessageHandler(Filters.text, LetsMakanEnd)]
+        sub_1 : [CallbackQueryHandler(LetsMakan_helper)]
+    }, fallbacks = [CommandHandler("cancel", Cancel)], per_user = True, per_chat= False)
+
+    end_conv = ConversationHandler(entry_points = [CommandHandler("EndMakan", EndMakan)], states = {
+        sub_1 : [MessageHandler(Filters.regex('^Confirm plus chop$')|Filters.regex('^Hol up$'), EndMakan_helper)],
+        sub_2 : [MessageHandler(Filters.regex('^[0-9]*$'), save_phone)],
+        sub_3 : [MessageHandler(Filters.text, save_address)],
     }, fallbacks = [CommandHandler("cancel", Cancel)], per_user = True, per_chat= False)
     
     # Add to dispatcher
     dispatcher.add_handler(start_conv)
-    dispatcher.add_handler(CommandHandler("EndMakan", EndMakan))
+    dispatcher.add_handler(end_conv)
+
+def messageError(update, context, chat_type = "group"):
+    # Check where the message is coming from
+    error = update.effective_message.chat.type != chat_type
+    if(error):
+        context.bot.sendMessage(update.effective_user.id, text = "Please send your commands in a group!")
+    return error
