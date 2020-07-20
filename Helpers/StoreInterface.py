@@ -58,29 +58,33 @@ def openStore(update, context):
     bot_data = context.bot_data
     storeID = update.effective_user.id
 
-    if bot_data[storeID]["Store Open"]:
-        update.message.reply_text("Your store is already open! Use /menu to access the main menu.")
-        return ConversationHandler.END
+    # Authentication process
+    listOfStoreIDs = stores.list_of_ids
+    if storeID in listOfStoreIDs:
+        if bot_data[storeID]["Store Open"]:
+            update.message.reply_text("Your store is already open! Use /menu to access the main menu.")
+        else:    
+            bot_data[storeID]["Store Open"] = True
+            reply_keyboard = [['Close Shop'],
+                        ['View Orders']]
+            markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
+            update.message.reply_text("You will start receiving orders. \n We will notify you when there's a new order.", reply_markup = markup)
+            return CHOOSING
     else:
-        bot_data[storeID]["Store Open"] = True    
-        bot_data[storeID]["Store Open"] = True
-        reply_keyboard = [['Close Shop'],
-                    ['View Orders']]
-        markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
-        update.message.reply_text("You will start receiving orders. \n We will notify you when there's a new order.", reply_markup = markup)
-
-        return CHOOSING
+        update.message.reply_text("You do not have access to this command. Use /help to see the list of commands available.")
+        
+    return ConversationHandler.END
 
 
 def accepting(update, context):
-        # remove 'Choose an order'
-        context.bot.deleteMessage(update.effective_chat.id, update.callback_query.message.message_id)
+    # remove 'Choose an order'
+    context.bot.deleteMessage(update.effective_chat.id, update.callback_query.message.message_id)
 
-        keyboard = ["30 mins", "1 hour", "1.5 hours", "2 hours", "Back"]
-        reply_markup = InlineKeyboard(keyboard)
-        context.bot.sendMessage(chat_id = update.effective_user.id, text = "Estimated Waiting Time: ", reply_markup = reply_markup)
+    keyboard = ["30 mins", "1 hour", "1.5 hours", "2 hours", "Back"]
+    reply_markup = InlineKeyboard(keyboard)
+    context.bot.sendMessage(chat_id = update.effective_user.id, text = "Estimated Waiting Time: ", reply_markup = reply_markup)
 
-        return CHOOSING_WAITINGTIME
+    return CHOOSING_WAITINGTIME
 
 def rejecting(update, context):
     # remove 'choose an action'
