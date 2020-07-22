@@ -26,6 +26,11 @@ def InlineKeyboard(list_of_options):
     keyboard = [InlineKeyboardButton(item, callback_data = item) for item in list_of_options]
     return InlineKeyboardMarkup(build_menu(keyboard, n_cols = 1))
 
+def displayOrdersKeyboard(list_of_customerData):
+    keyboard = [InlineKeyboardButton(item.split("_")[0], callback_data = item.split("_")[1]) for item in list_of_customerData]
+    return InlineKeyboardMarkup(build_menu(keyboard, n_cols = 1))
+
+
 def defaultMenu(update, context):
 
     bot_data = context.bot_data
@@ -295,18 +300,17 @@ def view_orders(update, context):
     # assign tempQueue as the queue in orders so the data will not be lost
     bot_data[storeID]["orders"] = tempQueue
 
-    # create another list that contains just the customerName for the sake of 
-    # creating the keyboard
+    # create another list that contains the CustomerName and CustomerID
     newList = []
     for order in orderList:
-        newList.append(order.user.first_name)
+        newList.append(order.user.first_name + "_" + str(order.user.id))
     
     if len(newList) == 0:
         context.bot.sendMessage(chat_id = update.effective_user.id, text = "There are no orders at the moment. \n Click /menu to return to the Main Menu.")
         return ConversationHandler.END
     else:
-        # generate menu based on Customer Name
-        markup = InlineKeyboard(newList)
+        # generate menu based on Customer Name with Customer ID as its value
+        markup = displayOrdersKeyboard(newList)
 
         # TODO: Fix the bug where customers have the same first name. Perhaps add their unique id to the name
         # TODO: Add a back button
@@ -320,10 +324,10 @@ def specific_order(update, context):
     context.bot.deleteMessage(update.effective_chat.id, update.callback_query.message.message_id)
 
     if query != "Back":
-        customerName = query
+        customerID = int(query)
         # find and save order in user_data
         print("finding order in specific order")
-        # find order based on Customer Name
+        # find order based on Customer ID
         orderObj = None
         storeID = update.effective_user.id
         orders = context.bot_data[storeID]["orders"]
@@ -340,7 +344,7 @@ def specific_order(update, context):
         context.bot_data[storeID]["orders"] = tempQueue
 
         for order in orderList:
-            if order.user.first_name == customerName:
+            if order.user.id == customerID:
                 orderObj = order
         
         # save order object in User Data
@@ -356,7 +360,7 @@ def specific_order(update, context):
         keyboard = ["Order Details", "Accept Order", "Reject Order", "Back"]
     elif orderObj.accepted == True:
         # have the option to cancel orders 
-        keyboard = ["Order Details", "Deliver Order", "Reject Order", "Back"]
+        keyboard = ["Order Details", "Deliver Order", "Cancel Order", "Back"]
     else:
         # order has been rejected
         keyboard = ["Order Details", "Delete Order", "Back"]
@@ -431,7 +435,7 @@ def addShopHandlersTo(dispatcher):
             VIEWING_SPECIFIC_ORDER: [CallbackQueryHandler(specific_order)],
             AFTER_VIEWING_ORDER: [CallbackQueryHandler(list_order, pattern="Order"),
              CallbackQueryHandler(accepting, pattern="Accept"),
-             CallbackQueryHandler(rejecting, pattern="Reject"),
+             CallbackQueryHandler(rejecting, pattern="Reject|Cancel"),
              CallbackQueryHandler(completing, pattern="Deliver"),
              CallbackQueryHandler(deleting, pattern="Delete"),
              CallbackQueryHandler(view_orders, pattern="Back")
