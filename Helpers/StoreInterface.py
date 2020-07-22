@@ -8,7 +8,7 @@ import logging
 logging.basicConfig(format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                      level = logging.INFO)
 
-CHOOSING, VIEWING_SPECIFIC_ORDER, AFTER_VIEWING_ORDER, CHOOSING_WAITINGTIME, REJECTING, POST_REJECTION, COMPLETED = range(7)
+CHOOSING, VIEWING_SPECIFIC_ORDER, AFTER_VIEWING_ORDER, CHOOSING_WAITINGTIME, REJECTING, POST_REJECTION, COMPLETING, ACCEPTED = range(8)
 
 
 def build_menu(buttons,
@@ -28,19 +28,32 @@ def InlineKeyboard(list_of_options):
 
 def defaultMenu(update, context):
 
-    # clear chosen order data (if there's any)
-    context.user_data.pop("order", None)
+    bot_data = context.bot_data
+    storeID = update.effective_user.id
 
-    # display the menu options 
-    reply_keyboard = [['Close Shop'],
-                  ['View Orders']]
-    markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
-    update.message.reply_text("Choose an action:", reply_markup = markup)
+    # check if Shop status is Open
+    if bot_data[storeID]["Store Open"]:
+        # clear chosen order data (if there's any)
+        context.user_data.pop("order", None)
 
-    return CHOOSING
+        # display the menu options 
+        reply_keyboard = [['Close Shop'],
+                    ['View Orders']]
+        markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
+        update.message.reply_text("Choose an Action:", reply_markup = markup)
+
+        return CHOOSING
+    else: 
+        update.message.reply_text("Your store is not open! Use /open to start receiving orders.")
+        
+        return ConversationHandler.END
      
 
 def closeStore(update, context):
+    # remove 'Choose an Action'
+    if hasattr(update.callback_query, 'message'): 
+        context.bot.deleteMessage(update.effective_chat.id, update.callback_query.message.message_id)
+
     # clear chosen order data (if there's any)
     context.user_data.pop("order", None)
 
@@ -86,6 +99,43 @@ def accepting(update, context):
 
     return CHOOSING_WAITINGTIME
 
+def deleting(update, context):
+    # remove previous message
+    context.bot.deleteMessage(update.effective_chat.id, update.callback_query.message.message_id)
+
+    storeID = update.effective_chat.id
+    # remove order from Queue / List
+    # TODO: remove the Queue code after changing to list in the future
+    queue = context.bot_data[storeID]["orders"]
+
+    # orders is a queue of Order objects
+    # making this queue into a list of Order objects
+    orderList = []
+    tempQueue = Queue(maxsize= 10)
+    while queue.qsize() != 0:
+        order = queue.get()
+        orderList.append(order)
+
+    # find specific order in orderList and delete that order
+    currentOrder = context.user_data["order"]
+
+    for order in orderList:
+        if order.user.id == currentOrder.user.id:
+            continue
+        tempQueue.put(order)
+    
+    context.bot_data[storeID]["orders"] = tempQueue
+
+    print("tempQueue after deleting: {}".format(tempQueue))
+    print(tempQueue.qsize())
+
+    reply_keyboard = [['Done']]
+    markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
+
+    context.bot.sendMessage(chat_id = update.effective_user.id, text = "The order has been deleted.", reply_markup = markup)
+
+    return ACCEPTED
+
 def rejecting(update, context):
     # remove 'choose an action'
     context.bot.deleteMessage(update.effective_chat.id, update.callback_query.message.message_id)
@@ -95,6 +145,24 @@ def rejecting(update, context):
     reply_markup = InlineKeyboard(keyboard)
     context.bot.sendMessage(chat_id = update.effective_user.id, text = "Do you really want to reject this order?", reply_markup = reply_markup)
     return REJECTING
+
+def completing(update, context):
+    # remove 'choose an action'
+    context.bot.deleteMessage(update.effective_chat.id, update.callback_query.message.message_id)
+    
+    storeID = update.effective_user.id
+    
+    keyboard = ["Yes", "Back"]
+
+    # Display list of items ordered before confirming 
+    order = context.user_data["order"]
+    newDict = generateNewDict(order.food)
+    itemsOrderedInTextForm = generateFoodList(newDict, storeID)
+
+    reply_markup = InlineKeyboard(keyboard)
+    context.bot.sendMessage(chat_id = update.effective_user.id, text = itemsOrderedInTextForm + "\n" + "Are you sure the order has been completed and is ready to be delivered?", reply_markup = reply_markup)
+    return COMPLETING
+
 
 def rejected(update, context):
     # remove 'do u really want to reject this order'
@@ -107,14 +175,38 @@ def send_rejection(update, context):
 
     reason = update.message.text
     customerID = context.user_data["order"].user.id
+    storeID = update.effective_user.id
 
     # send Message to customer
     context.bot.sendMessage(chat_id = customerID, text = "Sorry, your order has been rejected. Reason: {}".format(reason))
-    # context.user_data.pop("CustomerName", None) 
+
+    # set Accepted boolean of Order in Queue to False
+    #TODO: Remove the Queue implementation and switch to List permanently. Currently is temporary solution.
+    queue = context.bot_data[storeID]["orders"]
+
+    # orders is a queue of Order objects
+    # making this queue into a list of Order objects
+    orderList = []
+    tempQueue = Queue(maxsize= 10)
+    while queue.qsize() != 0:
+        order = queue.get()
+        orderList.append(order)
+
+    # find specific order in orderList
+    order = context.user_data["order"]
+    for orderr in orderList:
+        if orderr.user.first_name == order.user.first_name and orderr.user.id == order.user.id:
+            orderr.accepted = False
+        
+        tempQueue.put(orderr)
+
+    # assign tempQueue as the queue in orders so the data will not be lost
+    context.bot_data[storeID]["orders"] = tempQueue
+
     reply_keyboard = [['Done']]
     markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
     update.message.reply_text("We will inform the customer that their order has been rejected. Have a nice day!", reply_markup = markup)
-    return COMPLETED
+    return ACCEPTED
 
 def accepted(update, context):
     # remove' estimated waiting time'
@@ -124,15 +216,63 @@ def accepted(update, context):
 
     customerID = context.user_data["order"].user.id
 
+    storeID = update.effective_user.id
+
     print('customerID: {}'.format(customerID))
     
     context.bot.sendMessage(chat_id = customerID, text = "Your order has been accepted! Estimated Waiting Time: {}".format(timeChosen))
+
+    # change Accepted boolean of the order to True
+    #TODO: Remove the Queue implementation and switch to List permanently. Currently is temporary solution.
+    queue = context.bot_data[storeID]["orders"]
+
+    # orders is a queue of Order objects
+    # making this queue into a list of Order objects
+    orderList = []
+    tempQueue = Queue(maxsize= 10)
+    while queue.qsize() != 0:
+        order = queue.get()
+        orderList.append(order)
+
+    # find specific order in orderList
+    order = context.user_data["order"]
+    for orderr in orderList:
+        if orderr.user.first_name == order.user.first_name and orderr.user.id == order.user.id:
+            orderr.accepted = True
+        
+        tempQueue.put(orderr)
+
+    # assign tempQueue as the queue in orders so the data will not be lost
+    context.bot_data[storeID]["orders"] = tempQueue
 
     reply_keyboard = [['Done']]
     markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
     context.bot.sendMessage(chat_id = update.effective_user.id, reply_markup = markup, text ="You have selected {} as the estimated waiting time. We will update the customer. Happy Cooking!".format(timeChosen))
 
-    return COMPLETED
+    return ACCEPTED
+
+def completed(update, context):
+    # remove 'do u really want to reject this order'
+    context.bot.deleteMessage(update.effective_chat.id, update.callback_query.message.message_id)
+
+    order = context.user_data["order"]
+
+    # inform the customer that their order is on the way
+    customerID = order.user.id
+    context.bot.sendMessage(chat_id = customerID, text = "Your order is on the way! You can start making your way to the pickup location that you've provided.")
+
+    # create a text message so owner can forward to the person doing the delivery
+    storeID = update.effective_user.id
+    orderInText = generateTextOrder(order, storeID)
+
+    context.bot.sendMessage(chat_id = update.effective_user.id, text = orderInText)
+    context.bot.sendMessage(chat_id = update.effective_user.id, text ="We have notified the customer that their order is on the way. You can forward the order details above to the person doing the delivery. \n Use /menu to access the Main Menu when you're done.")
+
+    # remove order from user_data
+    context.user_data.pop("order", None)
+
+    return ConversationHandler.END
+
 
 def view_orders(update, context):
     # remove 'Choose an Action'
@@ -161,13 +301,17 @@ def view_orders(update, context):
     for order in orderList:
         newList.append(order.user.first_name)
     
-    # generate menu based on Customer Name
-    markup = InlineKeyboard(newList)
+    if len(newList) == 0:
+        context.bot.sendMessage(chat_id = update.effective_user.id, text = "There are no orders at the moment. \n Click /menu to return to the Main Menu.")
+        return ConversationHandler.END
+    else:
+        # generate menu based on Customer Name
+        markup = InlineKeyboard(newList)
 
-    # TODO: Fix the bug where customers have the same first name. Perhaps add their unique id to the name
-    # TODO: Add a back button
-    context.bot.sendMessage(chat_id = update.effective_user.id, text = "Choose an order:", reply_markup = markup)
-    return VIEWING_SPECIFIC_ORDER
+        # TODO: Fix the bug where customers have the same first name. Perhaps add their unique id to the name
+        # TODO: Add a back button
+        context.bot.sendMessage(chat_id = update.effective_user.id, text = "Choose an order:", reply_markup = markup)
+        return VIEWING_SPECIFIC_ORDER
 
 def specific_order(update, context):
     query = update.callback_query.data
@@ -199,16 +343,26 @@ def specific_order(update, context):
             if order.user.first_name == customerName:
                 orderObj = order
         
-        # save order object
+        # save order object in User Data
         context.user_data["order"] = orderObj
     else:
         print("Back button was clicked, no need to update user_data")
     
-    # TODO: Render keys based on order status
-    keyboard = ["Items Ordered", "Accept Order", "Reject Order", "Back"]
+    # Render keys based on order status
+    orderObj = context.user_data["order"]
+    keyboard = []
+    if orderObj.accepted == None:
+        # haven't accept or reject order
+        keyboard = ["Order Details", "Accept Order", "Reject Order", "Back"]
+    elif orderObj.accepted == True:
+        # have the option to cancel orders 
+        keyboard = ["Order Details", "Deliver Order", "Reject Order", "Back"]
+    else:
+        # order has been rejected
+        keyboard = ["Order Details", "Delete Order", "Back"]
 
     new_reply_markup = InlineKeyboard(keyboard)
-    context.bot.sendMessage(chat_id = update.effective_user.id, text = "Choose an Action", reply_markup = new_reply_markup)
+    context.bot.sendMessage(chat_id = update.effective_user.id, text = "Choose an Action:", reply_markup = new_reply_markup)
     return AFTER_VIEWING_ORDER
 
 def list_order(update, context):
@@ -219,10 +373,28 @@ def list_order(update, context):
 
     storeID = update.effective_user.id
 
-    orderFoodDict = order.food
+    textForm = generateTextOrder(order, storeID)
+
+    # Create Back button
+    keyboard = [[InlineKeyboardButton("Back", callback_data="Back")]]
+    new_reply_markup = InlineKeyboardMarkup(keyboard)
+    context.bot.sendMessage(chat_id = update.effective_user.id, text = textForm, reply_markup = new_reply_markup)
+    return VIEWING_SPECIFIC_ORDER
+
+def generateTextOrder(order, storeID):
+    foodDict = order.food
+
+    newDict = generateNewDict(foodDict)
+            
+    textForm = "Address: \n{} \n\nContact: \n{} \n\n".format(order.address, order.phone)
+    textForm += generateFoodList(newDict, storeID)
+
+    return textForm
+
+def generateNewDict(foodDict):
     # create another dictionary with just the item id and quantity
     newDict = {}
-    for userOrders in orderFoodDict.values():
+    for userOrders in foodDict.values():
         for foodID, quantity in userOrders.items():
             # check if foodID exist in newDict.
             # if exist, increment the count
@@ -232,18 +404,17 @@ def list_order(update, context):
                 newDict[foodID] = oldValue + quantity
             else:
                 newDict[foodID] = 1
-            
-    textForm = "Address: \n{} \n\nContact: \n{} \n\n".format(order.address, order.phone)
-    textForm += "Items Ordered \n"
+
+    return newDict
+
+def generateFoodList(newDict, storeID):
+    # textForm = text
+    text = "Items Ordered: \n"
     # convert dict into text
     for foodID, quantity in newDict.items():
-        textForm += menu.item(stores.stores(storeID), foodID) + ": {}".format(quantity) + "\n"
+        text += menu.item(stores.stores(storeID), foodID) + ": {}".format(quantity) + "\n"
 
-    # Create Back button
-    keyboard = [[InlineKeyboardButton("Back", callback_data="Back")]]
-    new_reply_markup = InlineKeyboardMarkup(keyboard)
-    context.bot.sendMessage(chat_id = update.effective_user.id, text = textForm, reply_markup = new_reply_markup)
-    return VIEWING_SPECIFIC_ORDER
+    return text
 
 
 def addShopHandlersTo(dispatcher):
@@ -258,9 +429,11 @@ def addShopHandlersTo(dispatcher):
                                       view_orders)
                        ],
             VIEWING_SPECIFIC_ORDER: [CallbackQueryHandler(specific_order)],
-            AFTER_VIEWING_ORDER: [CallbackQueryHandler(list_order, pattern="Items"),
+            AFTER_VIEWING_ORDER: [CallbackQueryHandler(list_order, pattern="Order"),
              CallbackQueryHandler(accepting, pattern="Accept"),
              CallbackQueryHandler(rejecting, pattern="Reject"),
+             CallbackQueryHandler(completing, pattern="Deliver"),
+             CallbackQueryHandler(deleting, pattern="Delete"),
              CallbackQueryHandler(view_orders, pattern="Back")
             ],
             CHOOSING_WAITINGTIME:[CallbackQueryHandler(specific_order, pattern="Back"), 
@@ -268,7 +441,9 @@ def addShopHandlersTo(dispatcher):
             REJECTING:[CallbackQueryHandler(specific_order, pattern="Back"), 
             CallbackQueryHandler(rejected)],
             POST_REJECTION:[MessageHandler(Filters.text, send_rejection)],
-            COMPLETED:[MessageHandler(Filters.regex('^Done$'), defaultMenu)]
+            COMPLETING: [CallbackQueryHandler(specific_order, pattern="Back"),
+             CallbackQueryHandler(completed)],
+            ACCEPTED:[MessageHandler(Filters.regex('^Done$'), defaultMenu)]
         },
 
         fallbacks = [CommandHandler('menu', defaultMenu), CommandHandler('open', openStore)]
