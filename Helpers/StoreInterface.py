@@ -8,7 +8,7 @@ import logging
 logging.basicConfig(format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                      level = logging.INFO)
 
-CHOOSING, VIEWING_SPECIFIC_ORDER, AFTER_VIEWING_ORDER, CHOOSING_WAITINGTIME, REJECTING, POST_REJECTION, COMPLETING, ACCEPTED = range(8)
+CHOOSING, VIEWING_SPECIFIC_ORDER, AFTER_VIEWING_ORDER, AFTER_VIEWING_COMPLETED_ORDER, CHOOSING_WAITINGTIME, REJECTING, POST_REJECTION, COMPLETING, ACCEPTED = range(9)
 
 
 def build_menu(buttons,
@@ -40,10 +40,13 @@ def defaultMenu(update, context):
     if bot_data[storeID]["Store Open"]:
         # clear chosen order data (if there's any)
         context.user_data.pop("order", None)
+        # reset completed boolean to false 
+        context.user_data["Completed"] = False
 
         # display the menu options 
         reply_keyboard = [['Close Shop'],
-                    ['View Orders']]
+                    ['View Orders'],
+                    ['View Completed Orders']]
         markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
         update.message.reply_text("Choose an Action:", reply_markup = markup)
 
@@ -61,6 +64,7 @@ def closeStore(update, context):
 
     # clear chosen order data (if there's any)
     context.user_data.pop("order", None)
+    context.user_data.pop("completedOrders", None)
 
     # TODO: Reject any remaining orders (if any)
 
@@ -82,9 +86,14 @@ def openStore(update, context):
         if bot_data[storeID]["Store Open"]:
             update.message.reply_text("Your store is already open! Use /menu to access the main menu.")
         else:    
+            # initialize completed order list
+            context.user_data["completedOrders"] = []
+            context.user_data["Completed"] = False
+
             bot_data[storeID]["Store Open"] = True
             reply_keyboard = [['Close Shop'],
-                        ['View Orders']]
+                        ['View Orders'],
+                        ['View Completed Orders']]
             markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
             update.message.reply_text("You will start receiving orders. \n We will notify you when there's a new order.", reply_markup = markup)
             return CHOOSING
@@ -131,8 +140,8 @@ def deleting(update, context):
     
     context.bot_data[storeID]["orders"] = tempQueue
 
-    print("tempQueue after deleting: {}".format(tempQueue))
-    print(tempQueue.qsize())
+    # print("tempQueue after deleting: {}".format(tempQueue))
+    # print(tempQueue.qsize())
 
     reply_keyboard = [['Done']]
     markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
@@ -260,20 +269,42 @@ def completed(update, context):
     # remove 'do u really want to reject this order'
     context.bot.deleteMessage(update.effective_chat.id, update.callback_query.message.message_id)
 
-    order = context.user_data["order"]
+    currentOrder = context.user_data["order"]
 
     # inform the customer that their order is on the way
-    customerID = order.user.id
+    customerID = currentOrder.user.id
     context.bot.sendMessage(chat_id = customerID, text = "Your order is on the way! You can start making your way to the pickup location that you've provided.")
 
     # create a text message so owner can forward to the person doing the delivery
     storeID = update.effective_user.id
-    orderInText = generateTextOrder(order, storeID)
+    orderInText = generateTextOrder(currentOrder, storeID)
 
     context.bot.sendMessage(chat_id = update.effective_user.id, text = orderInText)
     context.bot.sendMessage(chat_id = update.effective_user.id, text ="We have notified the customer that their order is on the way. You can forward the order details above to the person doing the delivery. \n Use /menu to access the Main Menu when you're done.")
 
-    # remove order from user_data
+    # remove order from user_data and bot_data
+    # TODO: Change from queue implementation to list
+    context.user_data["completedOrders"].append(currentOrder)
+
+    queue = context.bot_data[storeID]["orders"]
+
+    # orders is a queue of Order objects
+    # making this queue into a list of Order objects
+    orderList = []
+    tempQueue = Queue(maxsize= 10)
+    while queue.qsize() != 0:
+        order = queue.get()
+        orderList.append(order)
+
+    for order in orderList:
+        if order.user.id == currentOrder.user.id:
+            continue
+        tempQueue.put(order)
+    
+    context.bot_data[storeID]["orders"] = tempQueue
+
+    ##### END OF CHANGE
+
     context.user_data.pop("order", None)
 
     return ConversationHandler.END
@@ -312,8 +343,36 @@ def view_orders(update, context):
         # generate menu based on Customer Name with Customer ID as its value
         markup = displayOrdersKeyboard(newList)
 
-        # TODO: Fix the bug where customers have the same first name. Perhaps add their unique id to the name
         # TODO: Add a back button
+        context.bot.sendMessage(chat_id = update.effective_user.id, text = "Choose an order:", reply_markup = markup)
+        return VIEWING_SPECIFIC_ORDER
+
+def view_completed_orders(update, context):
+    # remove 'Choose an Action'
+    if hasattr(update.callback_query, 'message'): 
+        context.bot.deleteMessage(update.effective_chat.id, update.callback_query.message.message_id)
+
+    listOfCompletedOrders = context.user_data["completedOrders"]
+
+    # create another list that contains the CustomerName and CustomerID
+    newList = []
+    for order in listOfCompletedOrders:
+        newList.append(order.user.first_name + "_" + str(order.user.id))
+
+    if len(newList) == 0:
+        context.bot.sendMessage(chat_id = update.effective_user.id, text = "There are no completed orders at the moment. \n Click /menu to return to the Main Menu.")
+        return ConversationHandler.END
+    else:
+        # generate menu based on Customer Name with Customer ID as its value
+        markup = displayOrdersKeyboard(newList)
+
+        # TODO: Add a back button
+
+        print("before assigning completed boolean to userdata : {}".format(context.user_data))
+        # set Boolean Completed to True
+        context.user_data["Completed"] = True
+        print("after assigning completed boolean to userdata : {}".format(context.user_data))
+
         context.bot.sendMessage(chat_id = update.effective_user.id, text = "Choose an order:", reply_markup = markup)
         return VIEWING_SPECIFIC_ORDER
 
@@ -330,23 +389,34 @@ def specific_order(update, context):
         # find order based on Customer ID
         orderObj = None
         storeID = update.effective_user.id
-        orders = context.bot_data[storeID]["orders"]
-        # orders is a queue of Order objects
-        # making this queue into a list
-        orderList = []
-        tempQueue = Queue(maxsize= 10)
-        while orders.qsize() != 0:
-            order = orders.get()
-            orderList.append(order)
-            tempQueue.put(order)
+        orders = None
+        if context.user_data["Completed"]:
+            print("in completed scenario")
+            # case where I'm viewing completed orders
+            orders = context.user_data["completedOrders"]
+            for order in orders:
+                if order.user.id == customerID:
+                    print("order found")
+                    orderObj = order
+        else:
+            print("in normal scenario")
+            orders = context.bot_data[storeID]["orders"]
+            # orders is a queue of Order objects
+            # making this queue into a list
+            orderList = []
+            tempQueue = Queue(maxsize= 10)
+            while orders.qsize() != 0:
+                order = orders.get()
+                orderList.append(order)
+                tempQueue.put(order)
 
-        # assign tempQueue as the queue in orders so the data will not be lost
-        context.bot_data[storeID]["orders"] = tempQueue
+            # assign tempQueue as the queue in orders so the data will not be lost
+            context.bot_data[storeID]["orders"] = tempQueue
 
-        for order in orderList:
-            if order.user.id == customerID:
-                orderObj = order
-        
+            for order in orderList:
+                if order.user.id == customerID:
+                    orderObj = order
+            
         # save order object in User Data
         context.user_data["order"] = orderObj
     else:
@@ -355,7 +425,10 @@ def specific_order(update, context):
     # Render keys based on order status
     orderObj = context.user_data["order"]
     keyboard = []
-    if orderObj.accepted == None:
+    if context.user_data["Completed"]:
+        # case where I'm viewing completed orders
+        keyboard = ["Order Details", "Back"]
+    elif orderObj.accepted == None:
         # haven't accept or reject order
         keyboard = ["Order Details", "Accept Order", "Reject Order", "Back"]
     elif orderObj.accepted == True:
@@ -367,7 +440,10 @@ def specific_order(update, context):
 
     new_reply_markup = InlineKeyboard(keyboard)
     context.bot.sendMessage(chat_id = update.effective_user.id, text = "Choose an Action:", reply_markup = new_reply_markup)
-    return AFTER_VIEWING_ORDER
+    if context.user_data["Completed"]:
+        return AFTER_VIEWING_COMPLETED_ORDER
+    else: 
+        return AFTER_VIEWING_ORDER
 
 def list_order(update, context):
     # remove previous message
@@ -430,7 +506,8 @@ def addShopHandlersTo(dispatcher):
             CHOOSING: [MessageHandler(Filters.regex('^Close Shop$'),
                                       closeStore),
                        MessageHandler(Filters.regex('^View Orders$'),
-                                      view_orders)
+                                      view_orders),
+                        MessageHandler(Filters.regex('^View Completed Orders$'), view_completed_orders)
                        ],
             VIEWING_SPECIFIC_ORDER: [CallbackQueryHandler(specific_order)],
             AFTER_VIEWING_ORDER: [CallbackQueryHandler(list_order, pattern="Order"),
@@ -439,6 +516,9 @@ def addShopHandlersTo(dispatcher):
              CallbackQueryHandler(completing, pattern="Deliver"),
              CallbackQueryHandler(deleting, pattern="Delete"),
              CallbackQueryHandler(view_orders, pattern="Back")
+            ],
+            AFTER_VIEWING_COMPLETED_ORDER: [CallbackQueryHandler(list_order, pattern = "Order"),
+             CallbackQueryHandler(view_completed_orders, pattern="Back")
             ],
             CHOOSING_WAITINGTIME:[CallbackQueryHandler(specific_order, pattern="Back"), 
             CallbackQueryHandler(accepted)],
