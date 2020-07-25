@@ -58,9 +58,6 @@ def defaultMenu(update, context):
      
 
 def closeStore(update, context):
-    # remove 'Choose an Action'
-    if hasattr(update.callback_query, 'message'): 
-        context.bot.deleteMessage(update.effective_chat.id, update.callback_query.message.message_id)
 
     # clear chosen order data (if there's any)
     context.user_data.pop("order", None)
@@ -261,7 +258,7 @@ def accepted(update, context):
 
     reply_keyboard = [['Done']]
     markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
-    context.bot.sendMessage(chat_id = update.effective_user.id, reply_markup = markup, text ="You have selected {} as the estimated waiting time. We will update the customer. Happy Cooking!".format(timeChosen))
+    context.bot.sendMessage(chat_id = update.effective_user.id, reply_markup = markup, text ="You have selected {} as the estimated waiting time. Remember to select 'Deliver Order' when you're done. Happy Cooking!".format(timeChosen))
 
     return ACCEPTED
 
@@ -334,7 +331,7 @@ def view_orders(update, context):
     # create another list that contains the CustomerName and CustomerID
     newList = []
     for order in orderList:
-        newList.append(order.user.first_name + "_" + str(order.user.id))
+        newList.append(order.user.first_name + orderStatus(order) + "_" + str(order.user.id))
     
     if len(newList) == 0:
         context.bot.sendMessage(chat_id = update.effective_user.id, text = "There are no orders at the moment. \n Click /menu to return to the Main Menu.")
@@ -348,16 +345,13 @@ def view_orders(update, context):
         return VIEWING_SPECIFIC_ORDER
 
 def view_completed_orders(update, context):
-    # remove 'Choose an Action'
-    if hasattr(update.callback_query, 'message'): 
-        context.bot.deleteMessage(update.effective_chat.id, update.callback_query.message.message_id)
 
     listOfCompletedOrders = context.user_data["completedOrders"]
 
     # create another list that contains the CustomerName and CustomerID
     newList = []
     for order in listOfCompletedOrders:
-        newList.append(order.user.first_name + "_" + str(order.user.id))
+        newList.append(order.user.first_name + orderStatus(order) + "_" + str(order.user.id))
 
     if len(newList) == 0:
         context.bot.sendMessage(chat_id = update.effective_user.id, text = "There are no completed orders at the moment. \n Click /menu to return to the Main Menu.")
@@ -376,6 +370,14 @@ def view_completed_orders(update, context):
         context.bot.sendMessage(chat_id = update.effective_user.id, text = "Choose an order:", reply_markup = markup)
         return VIEWING_SPECIFIC_ORDER
 
+def orderStatus(order):
+    if order.accepted:
+        return " (Accepted)"
+    elif order.accepted == None:
+        return ""
+    else:
+        return " (Rejected)"
+    
 def specific_order(update, context):
     query = update.callback_query.data
 
