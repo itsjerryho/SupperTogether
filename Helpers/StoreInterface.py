@@ -2,6 +2,7 @@ from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, Conve
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 from multiprocessing import Queue
 from Helpers.Data import menu, stores
+from multiprocessing import Manager
 import logging
 
 #Loggin
@@ -10,6 +11,9 @@ logging.basicConfig(format = '%(asctime)s - %(name)s - %(levelname)s - %(message
 
 CHOOSING, VIEWING_SPECIFIC_ORDER, AFTER_VIEWING_ORDER, AFTER_VIEWING_COMPLETED_ORDER, POST_REJECTION, ACCEPTED, CONFIRMING_STAGE = range(7)
 
+default_keyboard = [['Close Shop'],
+            ['View Orders'],
+            ['View Completed Orders']]
 
 def build_menu(buttons,
             n_cols,	
@@ -48,10 +52,7 @@ def defaultMenu(update, context):
         context.user_data["Completed"] = False
 
         # display the menu options 
-        reply_keyboard = [['Close Shop'],
-                    ['View Orders'],
-                    ['View Completed Orders']]
-        markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
+        markup = ReplyKeyboardMarkup(default_keyboard, one_time_keyboard=True)
 
         context.bot.sendMessage(chat_id = update.effective_user.id, text = "Choose an Action:", reply_markup = markup)
 
@@ -64,17 +65,27 @@ def defaultMenu(update, context):
 
 def closeStore(update, context):
 
+    bot_data = context.bot_data
+    storeID = update.effective_user.id
+
     # clear chosen order data (if there's any)
     context.user_data.pop("order", None)
     context.user_data.pop("completedOrders", None)
 
-    # TODO: Reject any remaining orders (if any)
+    listOfOrders = context.bot_data[storeID]["orders"]
 
-    # TODO: Ask Merlin to prevent ordering stage from sending stall owners any messages 
-    bot_data = context.bot_data
-    storeID = update.effective_user.id
-    bot_data[storeID]["Store Open"] = False
-    update.message.reply_text("You will stop receiving orders. Have a good rest!")
+    numPendingOrders = sum(order.accepted == None for order in listOfOrders)
+
+    if any(order.accepted for order in listOfOrders):
+        # case where owner still has accepted orders
+        update.message.reply_text("You still have accepted orders waiting to be served. Please reject the orders before closing your store.")
+    elif any(order.accepted == None for order in listOfOrders):
+        # case where owner still has pending orders
+        update.message.reply_text("You still have {} pending orders. Please reject the orders before closing your store.".format(numPendingOrders))
+    else :
+        bot_data[storeID]["Store Open"] = False
+        update.message.reply_text("You will stop receiving orders. Have a good rest!")
+        
     return ConversationHandler.END
 
 def openStore(update, context):
@@ -93,10 +104,7 @@ def openStore(update, context):
             context.user_data["Completed"] = False
 
             bot_data[storeID]["Store Open"] = True
-            reply_keyboard = [['Close Shop'],
-                        ['View Orders'],
-                        ['View Completed Orders']]
-            markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
+            markup = ReplyKeyboardMarkup(default_keyboard, one_time_keyboard=True)
             update.message.reply_text("You will start receiving orders. \n We will notify you when there's a new order.", reply_markup = markup)
             return CHOOSING
     else:
@@ -120,30 +128,19 @@ def deleting(update, context):
     context.bot.deleteMessage(update.effective_chat.id, update.callback_query.message.message_id)
 
     storeID = update.effective_chat.id
-    # remove order from Queue / List
-    # TODO: remove the Queue code after changing to list in the future
-    queue = context.bot_data[storeID]["orders"]
-
-    # orders is a queue of Order objects
-    # making this queue into a list of Order objects
-    orderList = []
-    tempQueue = Queue(maxsize= 10)
-    while queue.qsize() != 0:
-        order = queue.get()
-        orderList.append(order)
+    # remove order from List
+    orderList = context.bot_data[storeID]["orders"]
 
     # find specific order in orderList and delete that order
     currentOrder = context.user_data["order"]
 
+    newList = Manager().list()
     for order in orderList:
         if order.user.id == currentOrder.user.id:
             continue
-        tempQueue.put(order)
+        newList.append(order)
     
-    context.bot_data[storeID]["orders"] = tempQueue
-
-    # print("tempQueue after deleting: {}".format(tempQueue))
-    # print(tempQueue.qsize())
+    context.bot_data[storeID]["orders"] = newList
 
     reply_keyboard = [['Done']]
     markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
@@ -184,7 +181,7 @@ def rejected(update, context):
     # remove 'do u really want to reject this order'
     context.bot.deleteMessage(update.effective_chat.id, update.callback_query.message.message_id)
 
-    context.bot.sendMessage(chat_id = update.effective_user.id, text = "You have rejected the order. Please input your reason for rejection this order. (ie. Out of stock, no time etc)")
+    context.bot.sendMessage(chat_id = update.effective_user.id, text = "You have rejected the order. Please input your reason for rejection this order. (ie. Closing soon, no time etc)")
     return POST_REJECTION
 
 def send_rejection(update, context):
@@ -197,27 +194,20 @@ def send_rejection(update, context):
     context.bot.sendMessage(chat_id = customerID, text = "Sorry, your order has been rejected. Reason: {}".format(reason))
 
     # set Accepted boolean of Order in Queue to False
-    #TODO: Remove the Queue implementation and switch to List permanently. Currently is temporary solution.
-    queue = context.bot_data[storeID]["orders"]
+    orderList = context.bot_data[storeID]["orders"]
 
-    # orders is a queue of Order objects
-    # making this queue into a list of Order objects
-    orderList = []
-    tempQueue = Queue(maxsize= 10)
-    while queue.qsize() != 0:
-        order = queue.get()
-        orderList.append(order)
+    newList = Manager().list()
 
     # find specific order in orderList
     order = context.user_data["order"]
-    for orderr in orderList:
-        if orderr.user.first_name == order.user.first_name and orderr.user.id == order.user.id:
-            orderr.accepted = False
+    for item in orderList:
+        if item.user.first_name == order.user.first_name and item.user.id == order.user.id:
+            item.accepted = False
         
-        tempQueue.put(orderr)
+        newList.append(item)
 
     # assign tempQueue as the queue in orders so the data will not be lost
-    context.bot_data[storeID]["orders"] = tempQueue
+    context.bot_data[storeID]["orders"] = newList
 
     reply_keyboard = [['Done']]
     markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
@@ -233,33 +223,23 @@ def accepted(update, context):
     customerID = context.user_data["order"].user.id
 
     storeID = update.effective_user.id
-
-    print('customerID: {}'.format(customerID))
     
     context.bot.sendMessage(chat_id = customerID, text = "Your order has been accepted! Estimated Waiting Time: {}".format(timeChosen))
 
     # change Accepted boolean of the order to True
-    #TODO: Remove the Queue implementation and switch to List permanently. Currently is temporary solution.
-    queue = context.bot_data[storeID]["orders"]
-
-    # orders is a queue of Order objects
-    # making this queue into a list of Order objects
-    orderList = []
-    tempQueue = Queue(maxsize= 10)
-    while queue.qsize() != 0:
-        order = queue.get()
-        orderList.append(order)
+    orderList = context.bot_data[storeID]["orders"]
+    newList = Manager().list()
 
     # find specific order in orderList
     order = context.user_data["order"]
-    for orderr in orderList:
-        if orderr.user.first_name == order.user.first_name and orderr.user.id == order.user.id:
-            orderr.accepted = True
+    for item in orderList:
+        if item.user.first_name == order.user.first_name and item.user.id == order.user.id:
+            item.accepted = True
         
-        tempQueue.put(orderr)
+        newList.append(item)
 
     # assign tempQueue as the queue in orders so the data will not be lost
-    context.bot_data[storeID]["orders"] = tempQueue
+    context.bot_data[storeID]["orders"] = newList
 
     reply_keyboard = [['Done']]
     markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
@@ -285,27 +265,18 @@ def completed(update, context):
     context.bot.sendMessage(chat_id = update.effective_user.id, text ="We have notified the customer that their order is on the way. You can forward the order details above to the person doing the delivery. \n Use /menu to access the Main Menu when you're done.")
 
     # remove order from user_data and bot_data
-    # TODO: Change from queue implementation to list
     context.user_data["completedOrders"].append(currentOrder)
 
-    queue = context.bot_data[storeID]["orders"]
+    orderList = context.bot_data[storeID]["orders"]
 
-    # orders is a queue of Order objects
-    # making this queue into a list of Order objects
-    orderList = []
-    tempQueue = Queue(maxsize= 10)
-    while queue.qsize() != 0:
-        order = queue.get()
-        orderList.append(order)
+    newList = Manager().list()
 
     for order in orderList:
         if order.user.id == currentOrder.user.id:
             continue
-        tempQueue.put(order)
+        newList.append(order)
     
-    context.bot_data[storeID]["orders"] = tempQueue
-
-    ##### END OF CHANGE
+    context.bot_data[storeID]["orders"] = newList
 
     context.user_data.pop("order", None)
 
@@ -319,19 +290,7 @@ def view_orders(update, context):
 
     bot_data = context.bot_data
     storeID = update.effective_user.id
-    queue = bot_data[storeID]["orders"]
-
-    # orders is a queue of Order objects
-    # making this queue into a list of Order objects
-    orderList = []
-    tempQueue = Queue(maxsize= 10)
-    while queue.qsize() != 0:
-        order = queue.get()
-        orderList.append(order)
-        tempQueue.put(order)
-
-    # assign tempQueue as the queue in orders so the data will not be lost
-    bot_data[storeID]["orders"] = tempQueue
+    orderList = bot_data[storeID]["orders"]
 
     # create another list that contains the CustomerName and CustomerID
     newList = []
@@ -373,10 +332,8 @@ def view_completed_orders(update, context):
         # generate menu based on Customer Name with Customer ID as its value
         markup = displayOrdersKeyboard(newList)
 
-        print("before assigning completed boolean to userdata : {}".format(context.user_data))
         # set Boolean Completed to True
         context.user_data["Completed"] = True
-        print("after assigning completed boolean to userdata : {}".format(context.user_data))
 
         context.bot.sendMessage(chat_id = update.effective_user.id, text = "Choose an order:", reply_markup = markup)
         return VIEWING_SPECIFIC_ORDER
@@ -413,18 +370,7 @@ def specific_order(update, context):
                     orderObj = order
         else:
             print("in normal scenario")
-            orders = context.bot_data[storeID]["orders"]
-            # orders is a queue of Order objects
-            # making this queue into a list
-            orderList = []
-            tempQueue = Queue(maxsize= 10)
-            while orders.qsize() != 0:
-                order = orders.get()
-                orderList.append(order)
-                tempQueue.put(order)
-
-            # assign tempQueue as the queue in orders so the data will not be lost
-            context.bot_data[storeID]["orders"] = tempQueue
+            orderList = context.bot_data[storeID]["orders"]
 
             for order in orderList:
                 if order.user.id == customerID:
@@ -505,7 +451,7 @@ def generateFoodList(newDict, storeID):
     text = "Items Ordered: \n"
     # convert dict into text
     for foodID, quantity in newDict.items():
-        text += menu.item(stores.stores(storeID), foodID) + ": {}".format(quantity) + "\n"
+        text += menu.from_tuple_to_item(stores.stores(storeID), foodID) + ": {}".format(quantity) + "\n"
 
     return text
 
@@ -544,7 +490,6 @@ def addShopHandlersTo(dispatcher):
 
         fallbacks = [CommandHandler('menu', defaultMenu), CommandHandler('open', openStore)]
     )
-    
     
     # Add to dispatcher
     dispatcher.add_handler(order_handler)

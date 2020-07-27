@@ -99,6 +99,7 @@ def query_cat(update, context):
 
 def add_item(update, context, cat):
     # Save category
+    update.callback_query.answer()
     answer =  update.callback_query.data
 
     # Retrieve information
@@ -121,8 +122,7 @@ def add_item(update, context, cat):
     context.user_data["order"] = [None]*3
     
     # Header: Prompt user to select food/drink.
-    context.bot.sendMessage(chat_id = update.effective_user.id,
-                                text = "Please select your food/drink:\nPress /Cancel to cancel request", reply_markup = reply_markup)
+    update.effective_message.edit_text(text = "Please select your food/drink:\nPress /Cancel to cancel request", reply_markup = reply_markup)
 
     return option_1
 
@@ -134,8 +134,7 @@ def options(update, context, option):
 
     # Save answer
     context.user_data["order"][option - 2] = int(data)
-    print("Hello")
-
+    
     # Obtain ID
     ID = context.user_data["order"][0]
 
