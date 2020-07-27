@@ -18,8 +18,15 @@ def error(update, context):
     logger.warning('Update "%s" caused error "%s"', update, context.error)
 
 def main():
+    TOKEN = open("TOKEN.txt", "r").read()
+
     # pp = PicklePersistence(filename = "bot_data")
-    updater = Updater("1054268461:AAFSMepDnv3L4bq7bs9_ykhrnZVt24whpHU",use_context=True)
+    try:
+        updater = Updater(token = TOKEN, use_context=True)
+        updater.start_polling()
+    except:
+        print("Please input a valid token. To edit your token, open TOKEN.txt")
+        return
 
     dp = updater.dispatcher
     
@@ -60,7 +67,7 @@ def main():
     # start checking for updates
 
     print("Finished processing")
-    updater.start_polling()
+
 
     updater.idle()
 
