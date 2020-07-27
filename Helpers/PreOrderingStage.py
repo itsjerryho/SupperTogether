@@ -16,13 +16,13 @@ def LetsMakan(update, context):
         return ConversationHandler.END
 
     # Check for available restaurants
-    # available_restaurants = []
-    # for id in stores.toList("ID"):
-    #     if context.bot_data[id]['Store Open']:
-    #         available_restaurants.append(stores.stores(id))
+    available_restaurants = []
+    for id in stores.toList("ID"):
+        if context.bot_data[id]['Store Open']:
+            available_restaurants.append(stores.stores(id))
 
     # prompt user to choose a restaurant
-    available_restaurants = menu.rests()
+    # available_restaurants = menu.rests()
     if not available_restaurants:
         context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Sorry, there are not restaurants available at this time")
         return ConversationHandler.END
@@ -61,7 +61,8 @@ def EndMakan(update, context):
     # Only Host can close Makan
     if context.bot_data[update.effective_chat.id].user.id != update.effective_user.id:
         # End Convo
-        context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Eh hu give u the mandate the close the makan?\nPlease ask {}".format(update.effective_user.full_name))
+        user = context.bot_data[update.effective_chat.id].user.full_name
+        context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Eh hu give u the mandate the close the makan?\nPlease ask {}".format(user))
         return ConversationHandler.END
     
     order = context.bot_data[update.effective_chat.id]
@@ -71,6 +72,14 @@ def EndMakan(update, context):
         context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Oi recruit, ur order is empty leh. Dun anyhow play can anot?!")
         
         return ConversationHandler.END
+
+    elif order.totalCost()<10:
+        
+        context.bot.sendMessage(chat_id = update.effective_chat.id, 
+            text = ("You order is less than the minumum cost\nCurrent total cost: ${:.2f}\nMin order: $10").format(order.totalCost()))
+            
+        return ConversationHandler.END
+
     else:
         # Ask user to confirm
         buttons = [["Confirm plus chop"], ["Hol up"]]
@@ -119,7 +128,7 @@ def addToQueue(update, context):
     # Add to Store's Queue
     order = context.bot_data[context.user_data["chat_id"]] 
     store = context.bot_data[stores.ID(order.restaurant)]
-    store['orders'].put(order)
+    store['orders'].append(order)
 
     # Notify User order is being processed
     update.message.reply_text("Your order is being processed by the store owner, just relax for awhile")
@@ -128,7 +137,7 @@ def addToQueue(update, context):
     context.bot.sendMessage(chat_id = stores.ID(order.restaurant), text = "You have just received an order, click 'View Orders' to see your orders")
 
     # Clear bot data and user cache
-    del context.bot_data[update.effective_chat.id]
+    del context.bot_data[context.user_data["chat_id"]]
     context.user_data.clear()
 
     return ConversationHandler.END
@@ -153,6 +162,8 @@ def addPreOrderHandlersTo(dispatcher):
     }, fallbacks = [CommandHandler("cancel", Cancel)], per_user = True, per_chat= False)
     
     # Add to dispatcher
+    dispatcher.add_handler(CommandHandler('poll', poll))
+    dispatcher.add_handler(PollAnswerHandler(receive_poll_answer))
     dispatcher.add_handler(start_conv)
     dispatcher.add_handler(end_conv)
 
@@ -162,3 +173,57 @@ def messageError(update, context, chat_type = "group"):
     if(error):
         context.bot.sendMessage(update.effective_user.id, text = "Please send your commands in a group!")
     return error
+
+
+def poll(update, context):
+    """Sends a predefined poll"""
+    # Check for available restaurants
+    available_restaurants = []
+    for id in stores.toList("ID"):
+        if context.bot_data[id]['Store Open']:
+            available_restaurants.append(stores.stores(id))
+
+    
+    if not available_restaurants:
+        context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Sorry, there are not restaurants available at this time")
+        return ConversationHandler.END
+    elif len(available_restaurants)== 1:
+        context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Only {} is available. Select /LetsMakan to start ordering!".format(available_restaurants[0]))
+    else:
+        questions = available_restaurants
+        message = context.bot.send_poll(update.effective_chat.id, "Please vote for a store", questions,
+                                    is_anonymous=False)
+
+        # Save some info about the poll the bot_data for later use in receive_poll_answer
+        context.bot_data["poll"][message.poll.id] = {"questions": questions, "message_id": message.message_id,
+                                    "chat_id": update.effective_chat.id, "answers": 0, 
+                                    "limit": update.effective_chat.get_members_count()-1}
+
+def receive_poll_answer(update, context):
+    """Summarize a users poll vote"""
+    answer = update.poll_answer
+    poll_id = answer.poll_id
+    try:
+        questions = context.bot_data["poll"][poll_id]["questions"]
+    # this means this poll answer update is from an old poll, we can't do our answering then
+    except KeyError:
+        return
+    selected_options = answer.option_ids
+    answer_string = ""
+    for question_id in selected_options:
+        if question_id != selected_options[-1]:
+            answer_string += questions[question_id] + " and "
+        else:
+            answer_string += questions[question_id]
+    user_mention = mention_html(update.effective_user.id, update.effective_user.full_name)
+
+    # save results
+    context.bot.send_message(context.bot_data["poll"][poll_id]["chat_id"],
+                             "{} chose {}!".format(user_mention, answer_string),
+                             parse_mode=ParseMode.HTML)
+    context.bot_data["poll"][poll_id]["answers"] += 1
+    # Close poll after three participants voted
+    if context.bot_data["poll"][poll_id]["answers"] == context.bot_data["poll"][poll_id]["limit"]:
+        context.bot.sendMessage(context.bot_data["poll"][poll_id]["chat_id"], text = "Poll Closed! Please select /LetsMakan to start ordering!")
+        context.bot.stop_poll(context.bot_data["poll"][poll_id]["chat_id"],
+                              context.bot_data["poll"][poll_id]["message_id"])
