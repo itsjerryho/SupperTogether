@@ -133,7 +133,11 @@ def options(update, context, option):
     data = query.data
 
     # Save answer
-    context.user_data["order"][option - 2] = int(data)
+    if int(data) != -1:
+        context.user_data["order"][option - 2] = int(data)
+    else:
+        context.user_data["order"][option - 2] = None
+
     
     # Obtain ID
     ID = context.user_data["order"][0]
@@ -149,6 +153,7 @@ def options(update, context, option):
 
     # Build reply_markup
     buttons = ([[InlineKeyboardButton(list_of_choices[i] + " - $" + "{:.2f}".format(list_of_costs[i]), callback_data=i)] for i in range(len(list_of_choices))])
+    buttons.append([InlineKeyboardButton("Skip", callback_data=-1)])
     reply_markup = InlineKeyboardMarkup(buttons)
 
     # Edit message
@@ -165,9 +170,11 @@ def addOrder_helper(update, context, option):
     restaurant = order.restaurant
 
     # save answer
-    answer = query.data
-    context.user_data["order"][option - 2] = int(answer)
-
+    answer = int(query.data)
+    if answer != -1:        
+        context.user_data["order"][option - 2] = answer
+    else:
+        context.user_data["order"][option - 2] = None
     #remove message text
     context.bot.deleteMessage(update.effective_chat.id, update.callback_query.message.message_id)
     
@@ -270,4 +277,8 @@ def messageError(update, context, chat_type = "group"):
     error = update.effective_message.chat.type != chat_type
     if(error):
         context.bot.sendMessage(update.effective_user.id, text = "Please send your commands in a group!")
+    elif not update.effective_chat.id in context.bot_data:
+        error = True
+        context.bot.sendMessage(update.effective_chat.id, text = "Please create a makan session first!")
+    
     return error

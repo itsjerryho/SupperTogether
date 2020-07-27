@@ -15,6 +15,11 @@ def LetsMakan(update, context):
         context.bot.sendMessage(update.effective_user.id, text = "Send your commands in a group")
         return ConversationHandler.END
 
+    # Check if group has already placed an order
+    if update.effective_message.chat.id in context.bot_data:
+        context.bot.sendMessage(update.effective_user.id, text = "Eh bro, already got one makan session. Either /EndMakan or /CancelMakan before making another session.")
+        return ConversationHandler.END
+    
     # Check for available restaurants
     available_restaurants = []
     for id in stores.toList("ID"):
@@ -24,12 +29,12 @@ def LetsMakan(update, context):
     # prompt user to choose a restaurant
     # available_restaurants = menu.rests()
     if not available_restaurants:
-        context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Sorry, there are not restaurants available at this time")
+        context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Sorry, there aren't any restaurants available at this time")
         return ConversationHandler.END
     else:
         buttons = [[InlineKeyboardButton(r, callback_data=r)] for r in available_restaurants]
         reply_markup = InlineKeyboardMarkup(buttons)
-        context.bot.sendMessage(chat_id = update.effective_user.id, text = "Please select a restaurant: ", reply_markup = reply_markup)
+        context.bot.sendMessage(chat_id = update.effective_user.id, text = "Please select a restaurant:\nPress /cancel to cancel request ", reply_markup = reply_markup)
 
         context.user_data["chat_id"] = update.effective_chat.id
         return sub_1
@@ -50,13 +55,30 @@ def LetsMakan_helper(update, context):
         "\n/addOrder - add order" + 
         "\n/viewOrder - view all orders" + 
         "\n/removeOrder - remove an order" +
-        "\n/EndMakan - EndMakan")
+        "\n/EndMakan - EndMakan"
+        "\n/CancelMakan - Cancel Makan")
 
     return ConversationHandler.END
 
+def CancelMakan(update, context):
+    # Accept only commands from group chat
+    if messageError(update, context):
+        return ConversationHandler.END
+
+    # Only Host can close Makan
+    if context.bot_data[update.effective_chat.id].user.id != update.effective_user.id:
+        # End Convo
+        user = context.bot_data[update.effective_chat.id].user.full_name
+        context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Wah dun anyhow cancel leh?\nPlease ask {}".format(user))
+        return
+
+    del context.bot_data[update.effective_chat.id]
+    context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Makan Session has been cancelled, boss")
+
 def EndMakan(update, context):
     # Accept only commands from group chat
-    messageError(update, context)
+    if messageError(update, context):
+        return ConversationHandler.END
     
     # Only Host can close Makan
     if context.bot_data[update.effective_chat.id].user.id != update.effective_user.id:
@@ -66,14 +88,20 @@ def EndMakan(update, context):
         return ConversationHandler.END
     
     order = context.bot_data[update.effective_chat.id]
-    
+    if not context.bot_data[stores.ID(order.restaurant)]['Store Open']:
+        # If store is not open, then cancel order and apologise
+        context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Wah u suay sia, the store just closed man... Press /Poll or /LetsMakan to see which restaurants are available")
+        del context.bot_data[update.effective_chat.id]
+
+        return ConversationHandler.END
+
     # Check if user has ordered anything
-    if not order.food:
+    elif not order.food:
         context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Oi recruit, ur order is empty leh. Dun anyhow play can anot?!")
         
         return ConversationHandler.END
 
-    elif order.totalCost()<10:
+    elif order.totalCost()<2:
         
         context.bot.sendMessage(chat_id = update.effective_chat.id, 
             text = ("You order is less than the minumum cost\nCurrent total cost: ${:.2f}\nMin order: $10").format(order.totalCost()))
@@ -166,12 +194,16 @@ def addPreOrderHandlersTo(dispatcher):
     dispatcher.add_handler(PollAnswerHandler(receive_poll_answer))
     dispatcher.add_handler(start_conv)
     dispatcher.add_handler(end_conv)
+    dispatcher.add_handler(CommandHandler("cancelmakan", CancelMakan))
 
 def messageError(update, context, chat_type = "group"):
     # Check where the message is coming from
     error = update.effective_message.chat.type != chat_type
     if(error):
         context.bot.sendMessage(update.effective_user.id, text = "Please send your commands in a group!")
+    elif not update.effective_chat.id in context.bot_data:
+        error = True
+        context.bot.sendMessage(update.effective_chat.id, text = "Please create a makan session first!")
     return error
 
 
