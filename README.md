@@ -7,11 +7,18 @@
 # Installation:
 1. Clone our Repository
 2. Request for a API Token from BotFather on Telegram (Search 'BotFather' on Telegram and make a new bot)
-3. Open the Main.py file and paste your API Token in updater under the main method
+3. Open the Token.txt and add your API Token (Important!!)
 4. Run the bot in command prompt using 'Python Main.py'
-5. Type /getTelegramID to find out your unique telegram ID
-6. Go to Data.py, navigate to the 'stores' variable and add your telegram ID to the array/list.
-7. Terminate the bot in command prompt using 'Ctrl + C'
+5. Use command /teststore to initialise one of the stores as your User ID
+6. If you know your own user ID, u may edit the arrays in Helpers/Data.py before executing the bot.
+
+# Changing the menu
+1. Open Menu.xlsx
+2. To Add a restaurant, create a new sheet. The restaurant name should be the sheet name
+3. Using the template given, make sure that each item has an ORDER ID, type (drinks, food), item name, amount
+4. You may add up to two options, ensure that the list of options are mapped correctly to their respective costs 
+5. To change the store name, rename the sheet name
+
 
 # Usage:
 Use /help and /storehelp to find out more on the commands available for Students and Stall Owners respectively
