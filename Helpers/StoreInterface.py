@@ -8,7 +8,7 @@ import logging
 logging.basicConfig(format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                      level = logging.INFO)
 
-CHOOSING, VIEWING_SPECIFIC_ORDER, AFTER_VIEWING_ORDER, AFTER_VIEWING_COMPLETED_ORDER, CHOOSING_WAITINGTIME, REJECTING, POST_REJECTION, COMPLETING, ACCEPTED = range(9)
+CHOOSING, VIEWING_SPECIFIC_ORDER, AFTER_VIEWING_ORDER, AFTER_VIEWING_COMPLETED_ORDER, POST_REJECTION, ACCEPTED, CONFIRMING_STAGE = range(7)
 
 
 def build_menu(buttons,
@@ -33,6 +33,10 @@ def displayOrdersKeyboard(list_of_customerData):
 
 def defaultMenu(update, context):
 
+    # remove previous message (if any)
+    if hasattr(update.callback_query, 'message'): 
+        context.bot.deleteMessage(update.effective_chat.id, update.callback_query.message.message_id)
+
     bot_data = context.bot_data
     storeID = update.effective_user.id
 
@@ -48,7 +52,8 @@ def defaultMenu(update, context):
                     ['View Orders'],
                     ['View Completed Orders']]
         markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
-        update.message.reply_text("Choose an Action:", reply_markup = markup)
+
+        context.bot.sendMessage(chat_id = update.effective_user.id, text = "Choose an Action:", reply_markup = markup)
 
         return CHOOSING
     else: 
@@ -65,7 +70,7 @@ def closeStore(update, context):
 
     # TODO: Reject any remaining orders (if any)
 
-    # TODO: Ask Merlin to prevent ordering stage from sending stallowners any messages 
+    # TODO: Ask Merlin to prevent ordering stage from sending stall owners any messages 
     bot_data = context.bot_data
     storeID = update.effective_user.id
     bot_data[storeID]["Store Open"] = False
@@ -108,7 +113,7 @@ def accepting(update, context):
     reply_markup = InlineKeyboard(keyboard)
     context.bot.sendMessage(chat_id = update.effective_user.id, text = "Estimated Waiting Time: ", reply_markup = reply_markup)
 
-    return CHOOSING_WAITINGTIME
+    return CONFIRMING_STAGE
 
 def deleting(update, context):
     # remove previous message
@@ -154,8 +159,8 @@ def rejecting(update, context):
     keyboard = ["Reject", "Back"]
 
     reply_markup = InlineKeyboard(keyboard)
-    context.bot.sendMessage(chat_id = update.effective_user.id, text = "Do you really want to reject this order?", reply_markup = reply_markup)
-    return REJECTING
+    context.bot.sendMessage(chat_id = update.effective_user.id, text = "Do you really want to reject this order? This action is irreversible!", reply_markup = reply_markup)
+    return CONFIRMING_STAGE
 
 def completing(update, context):
     # remove 'choose an action'
@@ -172,7 +177,7 @@ def completing(update, context):
 
     reply_markup = InlineKeyboard(keyboard)
     context.bot.sendMessage(chat_id = update.effective_user.id, text = itemsOrderedInTextForm + "\n" + "Are you sure the order has been completed and is ready to be delivered?", reply_markup = reply_markup)
-    return COMPLETING
+    return CONFIRMING_STAGE
 
 
 def rejected(update, context):
@@ -332,35 +337,41 @@ def view_orders(update, context):
     newList = []
     for order in orderList:
         newList.append(order.user.first_name + orderStatus(order) + "_" + str(order.user.id))
+
+    # add back button to the menu
+    newList.append("Back_Back2")
     
-    if len(newList) == 0:
+    if len(newList) == 1:
         context.bot.sendMessage(chat_id = update.effective_user.id, text = "There are no orders at the moment. \n Click /menu to return to the Main Menu.")
         return ConversationHandler.END
     else:
         # generate menu based on Customer Name with Customer ID as its value
         markup = displayOrdersKeyboard(newList)
 
-        # TODO: Add a back button
         context.bot.sendMessage(chat_id = update.effective_user.id, text = "Choose an order:", reply_markup = markup)
         return VIEWING_SPECIFIC_ORDER
 
 def view_completed_orders(update, context):
 
+    if hasattr(update.callback_query, 'message'): 
+        context.bot.deleteMessage(update.effective_chat.id, update.callback_query.message.message_id)
+    
     listOfCompletedOrders = context.user_data["completedOrders"]
 
     # create another list that contains the CustomerName and CustomerID
     newList = []
     for order in listOfCompletedOrders:
-        newList.append(order.user.first_name + orderStatus(order) + "_" + str(order.user.id))
+        newList.append(order.user.first_name + " (Completed)" + "_" + str(order.user.id))
 
-    if len(newList) == 0:
+    # add back button to the menu
+    newList.append("Back_Back2")
+
+    if len(newList) == 1:
         context.bot.sendMessage(chat_id = update.effective_user.id, text = "There are no completed orders at the moment. \n Click /menu to return to the Main Menu.")
         return ConversationHandler.END
     else:
         # generate menu based on Customer Name with Customer ID as its value
         markup = displayOrdersKeyboard(newList)
-
-        # TODO: Add a back button
 
         print("before assigning completed boolean to userdata : {}".format(context.user_data))
         # set Boolean Completed to True
@@ -511,7 +522,7 @@ def addShopHandlersTo(dispatcher):
                                       view_orders),
                         MessageHandler(Filters.regex('^View Completed Orders$'), view_completed_orders)
                        ],
-            VIEWING_SPECIFIC_ORDER: [CallbackQueryHandler(specific_order)],
+            VIEWING_SPECIFIC_ORDER: [CallbackQueryHandler(defaultMenu, pattern="^Back2$"), CallbackQueryHandler(specific_order)],
             AFTER_VIEWING_ORDER: [CallbackQueryHandler(list_order, pattern="Order"),
              CallbackQueryHandler(accepting, pattern="Accept"),
              CallbackQueryHandler(rejecting, pattern="Reject|Cancel"),
@@ -519,16 +530,15 @@ def addShopHandlersTo(dispatcher):
              CallbackQueryHandler(deleting, pattern="Delete"),
              CallbackQueryHandler(view_orders, pattern="Back")
             ],
+            CONFIRMING_STAGE: [CallbackQueryHandler(specific_order, pattern="Back"),
+            CallbackQueryHandler(rejected, pattern="Reject"), 
+            CallbackQueryHandler(completed, pattern="Yes"),
+            CallbackQueryHandler(accepted)
+            ],
             AFTER_VIEWING_COMPLETED_ORDER: [CallbackQueryHandler(list_order, pattern = "Order"),
              CallbackQueryHandler(view_completed_orders, pattern="Back")
             ],
-            CHOOSING_WAITINGTIME:[CallbackQueryHandler(specific_order, pattern="Back"), 
-            CallbackQueryHandler(accepted)],
-            REJECTING:[CallbackQueryHandler(specific_order, pattern="Back"), 
-            CallbackQueryHandler(rejected)],
             POST_REJECTION:[MessageHandler(Filters.text, send_rejection)],
-            COMPLETING: [CallbackQueryHandler(specific_order, pattern="Back"),
-             CallbackQueryHandler(completed)],
             ACCEPTED:[MessageHandler(Filters.regex('^Done$'), defaultMenu)]
         },
 
