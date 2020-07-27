@@ -1,12 +1,16 @@
 import pandas as pd
 import numpy as np
 
+
+cat_1 =  "Cat_1"
+
 class Menu:
     def __init__(self, filename):
         self.filename = filename
         self.df = pd.read_excel(filename, sheet_name = None, index_col = 0)
         self.food = {}
         self.price = {}
+        self.cat = {}
         # List of restaurants
         self.restaurants = list(self.df.keys())
 
@@ -15,117 +19,98 @@ class Menu:
         # Process data
         for r in self.restaurants:
             r_data = self.df[r]
-            r_data.iloc[:,[2,4]] = r_data.iloc[:,[2,4]].applymap(spl_to_str)
-            r_data.iloc[:,[3,5]] = r_data.iloc[:,[3,5]].applymap(spl_to_float)
+
+            # Format strings into arrays
+            r_data.iloc[:,[3,5]] = r_data.iloc[:,[3,5]].applymap(spl_to_str)
+            r_data.iloc[:,[4,6]] = r_data.iloc[:,[4,6]].applymap(spl_to_float)
+            
+            # Price data frame
+            self.price[r] = pd.merge(pd.merge(r_data.iloc[:,2], r_data.iloc[:,4], on = 'OrderID'), r_data.iloc[:,6], on = 'OrderID')
+
             # Item data frame
+            self.food[r] = pd.merge(pd.merge(r_data.iloc[:,1], r_data.iloc[:,3], on = 'OrderID'), r_data.iloc[:,5], on = 'OrderID')
 
-            #Price data frame
-            self.price[r] = pd.merge(pd.merge(r_data.iloc[:,1], r_data.iloc[:,3], on = 'OrderID'), r_data.iloc[:,5], on = 'OrderID')
+            # Cat data frame
+            self.cat[r] = r_data.iloc[:,0]
 
-            self.food[r] = pd.merge(pd.merge(r_data.iloc[:,0], r_data.iloc[:,2], on = 'OrderID'), r_data.iloc[:,4], on = 'OrderID')
-    
-    def cost(self, restaurant, ID, option = 0):
-        """Returns the cost an object
-        restaurant: (str) Restaurant Name
-        ID: (int|tuple) Object ID
-            if ID is tuple, method will add all the cost
-        Option: (int, list, list) 
-            0 gives you the base price
-            1 gives you the list of addon prices of option 1
-            2 gives you the list of addon prices of option 2
-        """
-        if type(ID) is tuple:
-            ans = [None]*len(ID)
-            id = ID[0]
-            ans[0] = self.price[restaurant].iloc[:,0].loc[id] if id is not None else 0
-            ans[1] = self.price[restaurant].iloc[:,1].loc[id][int(ID[1])] if ID[1] is not None else 0
-            ans[2] = self.price[restaurant].iloc[:,2].loc[id][int(ID[2])] if ID[2] is not None else 0
-            return sum(ans)
-        
+    def from_tuple_to_cost(self, restaurant, ID):
+        ans = [None]*len(ID)
+        id = ID[0]
+        ans[0] = self.price[restaurant].iloc[:,0].loc[id] if id is not None else 0
+        ans[1] = self.price[restaurant].iloc[:,1].loc[id][int(ID[1])] if ID[1] is not None else 0
+        ans[2] = self.price[restaurant].iloc[:,2].loc[id][int(ID[2])] if ID[2] is not None else 0
+        return sum(ans)
+
+    def cost(self, restaurant, ID):
         #check if key exists
         if ID in (self.price[restaurant].index):
-            if option == 0:
-                output = self.price[restaurant].iloc[:,option].loc[ID]
-            elif option == 1:
-                output = self.price[restaurant].iloc[:,option].loc[ID]
-            elif option == 2:
-                output = self.price[restaurant].iloc[:,option].loc[ID]
-            
-            return output if not np.any(np.isnan(output)) else None
-
+            output = self.price[restaurant].iloc[:,0].loc[ID]
+            return output
+        
         else:
             return print("Error: ID does not exist")
-    
-    def item(self, restaurant, ID, option = 0):
-        """Returns the name of an object
-        restaurant: (str) Restaurant Name
-        ID: (int|tuple) Object ID
-            if ID is tuple, method will concatenate all together
-        Option: (int, list, list)
-            0 gives you the item's name
-            1 gives you the list of addon names of option 1
-            2 gives you the list of addon names of option 2
-        """
-        if type(ID) is tuple:
-            ans = [None]*len(ID)
-            id = ID[0]
-            ans[0] = self.food[restaurant].iloc[:,0].loc[id] if id is not None else ""
-            ans[1] = self.food[restaurant].iloc[:,1].loc[id][int(ID[1])] if ID[1] is not None else ""
-            ans[2] = self.food[restaurant].iloc[:,2].loc[id][int(ID[2])] if ID[2] is not None else ""
-            return ' '.join(ans)
-        else:
-            #check if key exists
-            if ID in (self.food[restaurant].index):
-                if option == 0:
-                    output = self.food[restaurant].iloc[:,option].loc[ID]
-                elif option == 1:
-                    output = self.food[restaurant].iloc[:,option].loc[ID]
-                elif option == 2:
-                    output = self.food[restaurant].iloc[:,option].loc[ID]
-                
 
-                # output can be either array or string
-                if type(output) is np.float64:
-                    return output if not np.isnan(output) else None
-                else:
-                    return output
-            else:
-                return print("Error: ID does not exist")
+    def list_of_cost_options(self, restaurant, ID, option):
+        output = self.price[restaurant].iloc[:,option].loc[ID]
+            
+        return output if not np.any(np.isnan(output)) else None
 
-    def listing(self, restaurant, data, col=0):
-        """ Gives you a list of data
-        restaurant: (str) Restaurant Name
-        data: (int) Select which data you want
-            0: Object IDs
-            1: Item names
-            2: prices
-        col: (int, list, list) select which option you want
-            0: Main
-            1: Option 1
-            2: Option 2
-        """
-        if data == 0:
-            # Print OrderID
-            output = self.food[restaurant].index.to_numpy().tolist()
-        if data == 1:
-            # Print Food [col]
-            output = self.food[restaurant].iloc[:,col].tolist()
-        if data == 2:
-            # Print Price [col]
-            output = self.price[restaurant].iloc[:,col].tolist()
+    def from_tuple_to_item(self, restaurant, ID):
+        ans = [None]*len(ID)
+        id = ID[0]
+        ans[0] = self.food[restaurant].iloc[:,0].loc[id] if id is not None else ""
+        ans[1] = self.food[restaurant].iloc[:,1].loc[id][int(ID[1])] if ID[1] is not None else ""
+        ans[2] = self.food[restaurant].iloc[:,2].loc[id][int(ID[2])] if ID[2] is not None else ""
+        return ' '.join(ans)
 
-        if type(output[0]) is float:
-            if np.any(np.isnan(output)):
-                # if any output is Nan, return None
-                return None
+    def item(self, restaurant, ID):
+        #check if key exists
+        if ID in (self.food[restaurant].index):
+            output = self.food[restaurant].iloc[:,0].loc[ID]
+
+            # output can be either array or string
+            if type(output) is np.float64:
+                return output if not np.isnan(output) else None
             else:
                 return output
         else:
+            return print("Error: ID does not exist")
+
+    def list_of_item_options(self, restaurant, ID, option):
+        output = self.food[restaurant].iloc[:,option].loc[ID]
+
+        # output can be either array or string
+        if type(output) is np.float64:
+            return output if not np.isnan(output) else None
+        else:
             return output
+
+    def list_of_items(self, restaurant, list_of_ID = None):
+        if list_of_ID is None:
+            return self.food[restaurant].iloc[:,0].tolist()
+        else:
+            return self.food[restaurant].iloc[list_of_ID,0].tolist()
+
+    def list_of_costs(self, restaurant, list_of_ID = None):
+        if list_of_ID is None:
+            return self.price[restaurant].iloc[:,0].tolist()
+        else:
+            return self.price[restaurant].iloc[list_of_ID,0].tolist()
+
+    def list_of_ID(self, restaurant):
+        return self.df[restaurant].index.to_numpy().tolist()
     
     def rests(self):
         return self.restaurants
 
+    def list_of_cat(self, r):
+        return list(dict.fromkeys(self.cat[r].dropna()))
+    
+    def cat_subset(self, r, cat):
+        subset = self.cat[r].loc[self.cat[r] == cat]
+        return subset.index.to_numpy().tolist()
+
+        
 class StoreData:
     def __init__(self, list_of_stores = np.empty(0, dtype=str), list_of_ids = np.empty(0, dtype=str)):
         self.list_of_stores = list_of_stores
@@ -146,18 +131,21 @@ class StoreData:
 
 menu = Menu("Menu.xlsx")
 stores = StoreData(menu.rests(), [1101780228,41345883])
-stores.df.to_excel("Stores.xlsx")
+
+print(menu.list_of_cat("Ah Lian Food"))
+# print(menu.list_of_costs("Ah Lian Food",menu.cat_subset("Ah Lian Food", "Western")))
+
 
 def Test() :
     r1 = "Ah Beng Drink"
     r2 = "Ah Lian Food"
     # Test individual items
     # None Values
-    print(menu.cost(r2, "A1", 2)) # return cost A1 option 2 = None
-    print(menu.item(r2, "A1", 2)) # return cost A1 option 2 = None
-    print(menu.listing(r2, 1, 2)) # return list of names, option 2 = [None]
-    print(menu.listing(r2, 2, 2)) # return list of cost, option 2 = [None]
-
+    print(menu.list_of_cost_options(r2, 0, 2)) # return cost A1 option 2 = None
+    print(menu.list_of_item_options(r2, 0, 2)) # return cost A1 option 2 = None
+    print(menu.listing(r2, 1, 2)) # return list of names, option 2 = None
+    print(menu.listing(r2, 2, 2)) # return list of cost, option 2 = None
+    print(menu.list_of_cost_options(r2, 0, 0))
 
     # Not None
     print(menu.listing(r2, 0, 0)) # return ID
