@@ -5,7 +5,7 @@ from Helpers.OrderingStage import addOrderHandlersTo
 # from Helpers.StoreInterface import StoreMode
 from Helpers.StoreInterface import addShopHandlersTo
 from Helpers.Data import menu, stores
-from multiprocessing import Queue
+from multiprocessing import Manager
 
 import logging
 #Loggin and errors
@@ -46,7 +46,7 @@ def main():
     for id in stores.toList("ID"):
         dp.bot_data[id] = {
             'Store Open': False,
-            'orders': Queue(maxsize = 10)
+            'orders': Manager().list()
         }
 
     # start checking for updates
