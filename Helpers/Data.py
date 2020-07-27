@@ -61,7 +61,7 @@ class Menu:
         ans[0] = self.food[restaurant].iloc[:,0].loc[id] if id is not None else ""
         ans[1] = self.food[restaurant].iloc[:,1].loc[id][int(ID[1])] if ID[1] is not None else ""
         ans[2] = self.food[restaurant].iloc[:,2].loc[id][int(ID[2])] if ID[2] is not None else ""
-        return ' '.join(ans)
+        return ' '.join(filter(None,ans))
 
     def item(self, restaurant, ID):
         #check if key exists
@@ -131,10 +131,6 @@ class StoreData:
 
 menu = Menu("Menu.xlsx")
 stores = StoreData(menu.rests(), [1101780228,41345883])
-
-print(menu.list_of_cat("Ah Lian Food"))
-# print(menu.list_of_costs("Ah Lian Food",menu.cat_subset("Ah Lian Food", "Western")))
-
 
 def Test() :
     r1 = "Ah Beng Drink"
