@@ -1,5 +1,6 @@
 # import
-from telegram.ext import Updater, CommandHandler
+from telegram.ext import Updater, CommandHandler, ConversationHandler, CallbackQueryHandler
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from Helpers.PreOrderingStage import addPreOrderHandlersTo
 from Helpers.OrderingStage import addOrderHandlersTo
 from Helpers.StoreInterface import addShopHandlersTo
@@ -34,6 +35,12 @@ def main():
     addPreOrderHandlersTo(dp)
     addOrderHandlersTo(dp)
     addShopHandlersTo(dp)
+
+    # Add test handlers
+    test = ConversationHandler(entry_points = [CommandHandler("testStore", registerStore)], states = {
+        1 : [CallbackQueryHandler(registerhelper)]
+    }, fallbacks = [CommandHandler("testStore", registerStore)], per_chat = False)
+    dp.add_handler(test)
     
     # Error Handler
     dp.add_error_handler(error)
@@ -66,6 +73,36 @@ def Help(update,context):
 
 def StoreHelp(update,context):
     context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Welcome to SupperTogether!\n\nTo start receiving orders, remember to click /open to open your Store.\n\nYou will be notified whenever a customer makes an order.\n\nIf you feel like you're stuck at any point in time, simply click /menu to access the Main Menu.\n\nAt the end of the day, remember to close your Store via the Main Menu to stop receiving orders. Happy Cooking!")
+
+def registerStore(update, context):
+
+    list_of_rests = menu.rests()
+    buttons = [[InlineKeyboardButton(list_of_rests[i], callback_data = i)] for i in range(len(list_of_rests))]
+    reply_markup = InlineKeyboardMarkup(buttons)
+    context.bot.sendMessage(chat_id = update.effective_user.id, text = "Please select a dummy store for testing:", reply_markup = reply_markup)
+
+    return 1
+
+def registerhelper(update, context):
+
+    update.callback_query.answer()
+    answer = update.callback_query.data
+    user_id = update.effective_user.id
+
+    r = stores.changeID(int(answer), user_id)
+    print(r)
+
+    #update stores
+    for id in stores.toList("ID"):
+        context.bot_data[id] = {
+            'Store Open': False,
+            'orders': Manager().list()
+        }
+    
+    update.effective_message.edit_text(text = "{} ID has been swapped to your! Please do not register for more than 1 store, otherwise u will crash the bot :(".format(r), 
+    reply_markup = None)
+
+
 
 if __name__ == '__main__':
     main()

@@ -129,6 +129,11 @@ class StoreData:
     def toList(self, data):
         return self.df.loc[:,data]
 
+    def changeID(self, index, ID):
+        self.list_of_ids[index] = ID
+        self.df.iloc[index,0] = ID
+        return self.df.iloc[index,1]
+
 menu = Menu("Menu.xlsx")
 stores = StoreData(menu.rests(), [1101780228,41345883])
 
