@@ -61,7 +61,8 @@ def EndMakan(update, context):
     # Only Host can close Makan
     if context.bot_data[update.effective_chat.id].user.id != update.effective_user.id:
         # End Convo
-        context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Eh hu give u the mandate the close the makan?\nPlease ask {}".format(update.effective_user.full_name))
+        user = context.bot_data[update.effective_chat.id].user.full_name
+        context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Eh hu give u the mandate the close the makan?\nPlease ask {}".format(user))
         return ConversationHandler.END
     
     order = context.bot_data[update.effective_chat.id]
@@ -71,6 +72,14 @@ def EndMakan(update, context):
         context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Oi recruit, ur order is empty leh. Dun anyhow play can anot?!")
         
         return ConversationHandler.END
+
+    elif order.totalCost()<10:
+        
+        context.bot.sendMessage(chat_id = update.effective_chat.id, 
+            text = ("You order is less than the minumum cost\nCurrent total cost: ${:.2f}\nMin order: $10").format(order.totalCost()))
+            
+        return ConversationHandler.END
+
     else:
         # Ask user to confirm
         buttons = [["Confirm plus chop"], ["Hol up"]]
@@ -119,7 +128,7 @@ def addToQueue(update, context):
     # Add to Store's Queue
     order = context.bot_data[context.user_data["chat_id"]] 
     store = context.bot_data[stores.ID(order.restaurant)]
-    store['orders'].put(order)
+    store['orders'].append(order)
 
     # Notify User order is being processed
     update.message.reply_text("Your order is being processed by the store owner, just relax for awhile")
@@ -128,7 +137,7 @@ def addToQueue(update, context):
     context.bot.sendMessage(chat_id = stores.ID(order.restaurant), text = "You have just received an order, click 'View Orders' to see your orders")
 
     # Clear bot data and user cache
-    del context.bot_data[update.effective_chat.id]
+    del context.bot_data[context.user_data["chat_id"]]
     context.user_data.clear()
 
     return ConversationHandler.END
