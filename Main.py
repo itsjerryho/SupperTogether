@@ -49,6 +49,7 @@ def main():
             'orders': Manager().list()
         }
 
+    dp.bot_data["poll"] = {}
     # start checking for updates
 
     print("Finished processing")
@@ -61,10 +62,10 @@ def Start(update, context):
     context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Hi, welcome to SupperTogether! To start inviting, just /LetsMakan")
 
 def Help(update,context):
-    context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Welcome to SupperTogether! \n To start ordering supper as a group, add me to your telegram group and /LetsMakan. \n Vote for your favourite restaurant as a group using our Poll feature and choose your order from the restaurant chosen using /addOrder. \n Remember to click /endMakan after everyone is done ordering. Sit back and wait for your supper to be delivered, bon appetit!")
+    context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Welcome to SupperTogether!\n\nTo start ordering supper as a group, add me to your telegram group and /LetsMakan.\n\nVote for your favourite restaurant as a group using our Poll feature and choose your order from the restaurant chosen using /addOrder.\n\nRemember to click /endMakan after everyone is done ordering. Sit back and wait for your supper to be delivered, bon appetit!")
 
 def StoreHelp(update,context):
-    context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Welcome to SupperTogether! \n To start receiving orders, remember to click /open to open your Store. \n You will be notified instantly once a customer makes an order. \n If you feel like you're stuck at any point in time, simply click /menu to access the Main Menu. \n At the end of the day, remember to close your Store via the Main Menu to stop receiving orders. Happy Cooking!")
+    context.bot.sendMessage(chat_id = update.effective_chat.id, text = "Welcome to SupperTogether!\n\nTo start receiving orders, remember to click /open to open your Store.\n\nYou will be notified whenever a customer makes an order.\n\nIf you feel like you're stuck at any point in time, simply click /menu to access the Main Menu.\n\nAt the end of the day, remember to close your Store via the Main Menu to stop receiving orders. Happy Cooking!")
 
 if __name__ == '__main__':
     main()
