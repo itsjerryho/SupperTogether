@@ -104,7 +104,7 @@ def EndMakan(update, context):
     elif order.totalCost()<2:
         
         context.bot.sendMessage(chat_id = update.effective_chat.id, 
-            text = ("You order is less than the minumum cost\nCurrent total cost: ${:.2f}\nMin order: $10").format(order.totalCost()))
+            text = ("You order is less than the minumum cost\nCurrent total cost: ${:.2f}\nMin order: $2").format(order.totalCost()))
             
         return ConversationHandler.END
 
@@ -129,25 +129,38 @@ def EndMakan_helper(update, context):
 
 def Phone(update, context):
     # Prompt user to Key in phone number
-    context.bot.sendMessage(chat_id = update.effective_user.id, text = "Please key in your phone number: ", 
+    text = "Please key in your phone number: " if update.effective_message.text == "Confirm plus chop" else "Please key in a valid 8 digit number"
+    context.bot.sendMessage(chat_id = update.effective_user.id, text = text, 
         reply_markup = ReplyKeyboardRemove())
     return sub_2
 
 def save_phone(update, context):
-    order = context.bot_data[context.user_data["chat_id"]]
-    order.phone = update.effective_message.text
+    # Check if number is valid
+    num = update.effective_message.text
+    if len(num) == 8 and (num[0] == '9' or num[0] == '8' or num[0] == '6'):
+        order = context.bot_data[context.user_data["chat_id"]]
+        order.phone = update.effective_message.text
 
-    return address(update, context)
+        return address(update, context)
+        
+    else:
+        # Invalid Number
+        context.bot.sendMessage(chat_id = update.effective_user.id, text = "Invalid number")
+        return Phone(update, context)
 
 def address(update, context):
+    list_of_residence = ["Eusoff Hall", "Kent Ridge Hall", "King Edward VII Hall", "Raffles Hall", "Sheares Hall", "Temasek Hall", "PGP House", "CAPT", "Tembusu", "RVRC", "RC4", "Cinnamon"]
+    buttons = [InlineKeyboardButton(h, callback_data=h) for h in list_of_residence]
+    format_buttons = [buttons[0:2], buttons[2:4], buttons[4:6], buttons[6:8], buttons[8:10], buttons[10:12]]
+    reply_markup = InlineKeyboardMarkup(format_buttons)
     # Prompt user to key in address
-    context.bot.sendMessage(chat_id = update.effective_user.id, text = "Please key in your address details: ")
+    context.bot.sendMessage(chat_id = update.effective_user.id, text = "Please key in your address details: ", reply_markup = reply_markup)
     return sub_3
 
 def save_address(update, context):
     # save address
     order = context.bot_data[context.user_data["chat_id"]] 
-    order.address = update.effective_message.text
+    order.address = update.callback_query.data
     
     # Add order to queue
     return addToQueue(update,context)
@@ -159,7 +172,7 @@ def addToQueue(update, context):
     store['orders'].append(order)
 
     # Notify User order is being processed
-    update.message.reply_text("Your order is being processed by the store owner, just relax for awhile")
+    update.effective_message.edit_text(text = "Your order is being processed by the store owner, just relax for awhile", reply_markup = None)
 
     # Notify Store Owner
     context.bot.sendMessage(chat_id = stores.ID(order.restaurant), text = "You have just received an order, click 'View Orders' to see your orders")
@@ -186,7 +199,7 @@ def addPreOrderHandlersTo(dispatcher):
     end_conv = ConversationHandler(entry_points = [CommandHandler("EndMakan", EndMakan)], states = {
         sub_1 : [MessageHandler(Filters.regex('^Confirm plus chop$')|Filters.regex('^Hol up$'), EndMakan_helper)],
         sub_2 : [MessageHandler(Filters.regex('^[0-9]*$'), save_phone)],
-        sub_3 : [MessageHandler(Filters.text, save_address)],
+        sub_3 : [CallbackQueryHandler(save_address)],
     }, fallbacks = [CommandHandler("cancel", Cancel)], per_user = True, per_chat= False)
     
     # Add to dispatcher
