@@ -3,11 +3,12 @@ import numpy as np
 
 
 cat_1 =  "Cat_1"
+dtypes = {'OrderID': int, 'Cat_1': str, 'Item': str, 'Amount': float, 'Option_1': str, 'Amount_1': str, 'Option_2': str, 'Amount_2': str}
 
 class Menu:
     def __init__(self, filename):
         self.filename = filename
-        self.df = pd.read_excel(filename, sheet_name = None, index_col = 0)
+        self.df = pd.read_excel(filename, sheet_name = None, index_col = 0, dtype = dtypes)
         self.food = {}
         self.price = {}
         self.cat = {}
@@ -31,7 +32,8 @@ class Menu:
             self.food[r] = pd.merge(pd.merge(r_data.iloc[:,1], r_data.iloc[:,3], on = 'OrderID'), r_data.iloc[:,5], on = 'OrderID')
 
             # Cat data frame
-            self.cat[r] = r_data.iloc[:,0]
+            self.cat[r] = pd.DataFrame(r_data.iloc[:,0])
+            self.cat[r].insert(1, "Avail", True)
 
     def from_tuple_to_cost(self, restaurant, ID):
         ans = [None]*len(ID)
@@ -104,11 +106,22 @@ class Menu:
         return self.restaurants
 
     def list_of_cat(self, r):
-        return list(dict.fromkeys(self.cat[r].dropna()))
+        subset = self.cat[r].loc[self.cat[r].iloc[:,1] == True]
+        return dict.fromkeys(subset.iloc[:,0].tolist())
     
     def cat_subset(self, r, cat):
-        subset = self.cat[r].loc[self.cat[r] == cat]
+        subset = self.cat[r].loc[self.cat[r].iloc[:,0] == cat]
+        subset = subset.loc[subset.iloc[:,1] == True]
         return subset.index.to_numpy().tolist()
+    
+    def block_order(self, r, id):
+        self.cat[r].loc[id,"Avail"] = False
+    
+    def unblock_order(self, r, id):
+        self.cat[r].loc[id,"Avail"] = True
+
+    def check_avail(self, r, id):
+        return self.cat[r].loc[id,"Avail"]
 
         
 class StoreData:
@@ -135,51 +148,7 @@ class StoreData:
         return self.df.iloc[index,1]
 
 menu = Menu("Menu.xlsx")
+r = "Ah Lian Food"
+# list_of_residence = ["Eusoff Hall", "Kent Ridge Hall", "King Edward VII Hall", "Raffles Hall", "Sheares Hall", "Temasek Hall", "PGP House", "CAPT", "Tembusu", "RVRC", "RC4", "Cinnamon"]
+# dict_of_residence = ["Eusoff Hall": '10 Kent Ridge Dr, Singapore 119242' , "Kent Ridge Hall": , "King Edward VII Hall", "Raffles Hall", "Sheares Hall", "Temasek Hall", "PGP House", "CAPT", "Tembusu", "RVRC", "RC4", "Cinnamon"]
 stores = StoreData(menu.rests(), [1101780228,41345883])
-
-def Test() :
-    r1 = "Ah Beng Drink"
-    r2 = "Ah Lian Food"
-    # Test individual items
-    # None Values
-    print(menu.list_of_cost_options(r2, 0, 2)) # return cost A1 option 2 = None
-    print(menu.list_of_item_options(r2, 0, 2)) # return cost A1 option 2 = None
-    print(menu.listing(r2, 1, 2)) # return list of names, option 2 = None
-    print(menu.listing(r2, 2, 2)) # return list of cost, option 2 = None
-    print(menu.list_of_cost_options(r2, 0, 0))
-
-    # Not None
-    print(menu.listing(r2, 0, 0)) # return ID
-    print(menu.listing(r2, 1, 0)) # return list of items, option 0
-    print(menu.listing(r2, 2, 0)) # reutrn list of items, option 1
-
-    # Test combination
-    # W/ None
-    print(menu.item(r2, ("A1", 0, None)))
-    print(menu.cost(r2, ("A1", 0, None)))
-
-    # w/o None
-    print(menu.item("Ah Beng Drink", ("A1", 0, 0)))
-
-def Simulation():
-    # Simulation
-    # get list, choose item
-    r2 = "Ah Lian Food"
-    ans = [None]*3
-    print(menu.listing(r2, 0))
-    print(menu.listing(r2, 1))
-    print(menu.listing(r2, 2))
-
-    # Choose "A2"
-    ans[0] = "A2"
-    print(menu.item(r2, ans[0], 1))
-    print(menu.cost(r2, ans[0], 1))
-
-    # see if still got options
-    ans[1] = 0
-    if menu.item(r2, ans[0], 2) is None:
-        print(menu.item(r2,tuple(ans)))
-        print(menu.cost(r2,tuple(ans)))
-
-# Test()
-# Simulation()
