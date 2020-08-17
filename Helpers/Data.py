@@ -108,12 +108,19 @@ class Menu:
     def list_of_cat(self, r):
         subset = self.cat[r].loc[self.cat[r].iloc[:,1] == True]
         return dict.fromkeys(subset.iloc[:,0].tolist())
+
+    def show_cat(self, r):
+        return dict.fromkeys(self.cat[r].iloc[:,0].tolist())
     
     def cat_subset(self, r, cat):
         subset = self.cat[r].loc[self.cat[r].iloc[:,0] == cat]
         subset = subset.loc[subset.iloc[:,1] == True]
         return subset.index.to_numpy().tolist()
     
+    def cat_subset_all(self, r, cat):
+        subset = self.cat[r].loc[self.cat[r].iloc[:,0] == cat]
+        return subset.index.to_numpy().tolist()
+
     def block_order(self, r, id):
         self.cat[r].loc[id,"Avail"] = False
     

@@ -9,11 +9,13 @@ import logging
 logging.basicConfig(format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                      level = logging.INFO)
 
-CHOOSING, VIEWING_SPECIFIC_ORDER, AFTER_VIEWING_ORDER, AFTER_VIEWING_COMPLETED_ORDER, POST_REJECTION, ACCEPTED, CONFIRMING_STAGE = range(7)
+CHOOSING, VIEWING_SPECIFIC_ORDER, AFTER_VIEWING_ORDER, AFTER_VIEWING_COMPLETED_ORDER, POST_REJECTION, ACCEPTED, CONFIRMING_STAGE, CHOOSING_CAT, BLOCKING, REDIRECT = range(10)
 
 default_keyboard = [['Close Shop'],
             ['View Orders'],
-            ['View Completed Orders']]
+            ['View Completed Orders'],
+            ['Block Orders']
+            ]
 
 def build_menu(buttons,
             n_cols,	
@@ -44,24 +46,28 @@ def defaultMenu(update, context):
     bot_data = context.bot_data
     storeID = update.effective_user.id
 
-    # check if Shop status is Open
-    if bot_data[storeID]["Store Open"]:
-        # clear chosen order data (if there's any)
-        context.user_data.pop("order", None)
-        # reset completed boolean to false 
-        context.user_data["Completed"] = False
+    # Authentication process
+    listOfStoreIDs = stores.list_of_ids
+    if storeID in listOfStoreIDs:
+        # check if Shop status is Open
+        if bot_data[storeID]["Store Open"]:
+            # clear chosen order data (if there's any)
+            context.user_data.pop("order", None)
+            # reset completed boolean to false 
+            context.user_data["Completed"] = False
 
-        # display the menu options 
-        markup = ReplyKeyboardMarkup(default_keyboard, one_time_keyboard=True)
+            # display the menu options 
+            markup = ReplyKeyboardMarkup(default_keyboard, one_time_keyboard=True)
 
-        context.bot.sendMessage(chat_id = update.effective_user.id, text = "Choose an Action:", reply_markup = markup)
+            context.bot.sendMessage(chat_id = update.effective_user.id, text = "Choose an Action:", reply_markup = markup)
 
-        return CHOOSING
-    else: 
-        update.message.reply_text("Your store is not open! Use /open to start receiving orders.")
-        
-        return ConversationHandler.END
-     
+            return CHOOSING
+        else: 
+            update.message.reply_text("Your store is not open! Use /open to start receiving orders.")            
+    else:
+        update.message.reply_text("You do not have access to this command. Use /help to see the list of commands available.")
+    
+    return ConversationHandler.END
 
 def closeStore(update, context):
 
@@ -282,6 +288,71 @@ def completed(update, context):
 
     return ConversationHandler.END
 
+def block_orders(update, context):
+    #  # remove Previous Message
+    # if hasattr(update.callback_query, 'message'): 
+    #     context.bot.deleteMessage(update.effective_chat.id, update.callback_query.message.message_id)
+
+    storeID = update.effective_user.id
+    myStoreName = stores.stores(storeID)
+
+    # generate category
+    list_of_categories = menu.show_cat(myStoreName)
+
+    # Create reply_markup
+    buttons = [[InlineKeyboardButton(c, callback_data= c)] for c in list_of_categories]
+    reply_markup = InlineKeyboardMarkup(buttons)
+
+    # Send Message: Prompt user to select cat.
+    context.bot.sendMessage(chat_id = update.effective_user.id,
+                                text = "Please a category:\nPress /Cancel to cancel request", reply_markup = reply_markup)
+
+    return CHOOSING_CAT
+
+def checkBlockStatus(res, id):
+    if menu.check_avail(res, id):
+        return ""
+    else:
+        return " (Blocked)"
+
+def choosing_item(update, context):
+    # update.callback_query.answer()
+    catSelected =  update.callback_query.data
+    storeID = update.effective_user.id
+    myStoreName = stores.stores(storeID)
+
+    ID_list = menu.cat_subset_all(myStoreName, catSelected)
+    Item_list = menu.list_of_items(myStoreName, ID_list)
+
+    buttons = [[InlineKeyboardButton(Item_list[i] + checkBlockStatus(myStoreName, ID_list[i]), callback_data= ID_list[i])] for i in range(len(ID_list))]
+
+    reply_markup = InlineKeyboardMarkup(buttons)
+
+    update.effective_message.edit_text(text = "Select the food/drink that you want to block/unblock:\nPress /Cancel to cancel request", reply_markup = reply_markup)
+
+    return BLOCKING
+
+def block_item(update, context):
+    itemSelected = int(update.callback_query.data)
+
+    storeID = update.effective_user.id
+    myStoreName = stores.stores(storeID)
+    Item_list = menu.list_of_items(myStoreName)
+
+    temp = 0
+
+    if (menu.check_avail(myStoreName, itemSelected)):
+        menu.block_order(myStoreName, itemSelected)
+    else:
+        menu.unblock_order(myStoreName, itemSelected)
+        temp = 1
+
+    keyboard = ["Done"]
+    reply_markup = InlineKeyboard(keyboard)
+
+    update.effective_message.edit_text(text = "{} has been {}".format(Item_list[itemSelected], "blocked" if temp == 0 else "unblocked"), reply_markup = reply_markup)
+
+    return REDIRECT
 
 def view_orders(update, context):
     # remove 'Choose an Action'
@@ -466,7 +537,8 @@ def addShopHandlersTo(dispatcher):
                                       closeStore),
                        MessageHandler(Filters.regex('^View Orders$'),
                                       view_orders),
-                        MessageHandler(Filters.regex('^View Completed Orders$'), view_completed_orders)
+                        MessageHandler(Filters.regex('^View Completed Orders$'), view_completed_orders),
+                        MessageHandler(Filters.regex('^Block Orders$'), block_orders)
                        ],
             VIEWING_SPECIFIC_ORDER: [CallbackQueryHandler(defaultMenu, pattern="^Back2$"), CallbackQueryHandler(specific_order)],
             AFTER_VIEWING_ORDER: [CallbackQueryHandler(list_order, pattern="Order"),
@@ -485,10 +557,13 @@ def addShopHandlersTo(dispatcher):
              CallbackQueryHandler(view_completed_orders, pattern="Back")
             ],
             POST_REJECTION:[MessageHandler(Filters.text, send_rejection)],
-            ACCEPTED:[MessageHandler(Filters.regex('^Done$'), defaultMenu)]
+            ACCEPTED:[MessageHandler(Filters.regex('^Done$'), defaultMenu)],
+            CHOOSING_CAT:[CallbackQueryHandler(choosing_item)],
+            BLOCKING:[CallbackQueryHandler(block_item)],
+            REDIRECT: [CallbackQueryHandler(defaultMenu)]
         },
 
-        fallbacks = [CommandHandler('menu', defaultMenu), CommandHandler('open', openStore)]
+        fallbacks = [CommandHandler('menu', defaultMenu), CommandHandler('open', openStore), CommandHandler('cancel', defaultMenu)]
     )
     
     # Add to dispatcher
